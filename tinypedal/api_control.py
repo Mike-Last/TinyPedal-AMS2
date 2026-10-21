@@ -36,6 +36,7 @@ def _get_available_api(enable_legacy: bool):
         _api.NAME: _api
         for _api in (
             adapter.SimACC,
+            adapter.SimAMS2,
             adapter.SimLMU,
             adapter.SimLMULegacy,
             adapter.SimRF2,

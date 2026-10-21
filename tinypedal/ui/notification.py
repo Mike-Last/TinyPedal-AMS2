@@ -127,7 +127,7 @@ class NotifyBar(QWidget):
             and cfg.telemetry["enable_auto_backup_car_setup"]
         )
         if self.carsetup.isVisible():
-            if api.name == API.NAME_ACC:
+            if api.name in (API.NAME_ACC, API.NAME_AMS2):
                 self.carsetup.setText("Auto Backup Car Setup Unavailable")
                 self.carsetup.setStyleSheet("color: #FFF;background: #555;")
             else:

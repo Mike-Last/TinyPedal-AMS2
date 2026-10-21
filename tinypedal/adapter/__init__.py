@@ -22,6 +22,7 @@ API data adapter
 
 from ._connector import APIDataReader, Connector
 from .acc_connector import SimACC
+from .ams2_connector import SimAMS2
 from .lmu_connector import SimLMU
 from .rf2_connector import SimLMULegacy, SimRF2
 
@@ -29,6 +30,7 @@ __all__ = (
     "APIDataReader",
     "Connector",
     "SimACC",
+    "SimAMS2",
     "SimLMU",
     "SimLMULegacy",
     "SimRF2",

@@ -4,7 +4,7 @@ TinyPedal is a Free and Open Source telemetry overlay application for racing sim
 
 Focuses on minimalist design, light-weight and efficiency, extensive customization and data analysis. Features a large collection of highly configurable overlay widgets and data modules, advanced fuel calculator and editing tools.
 
-Currently supports `Assetto Corsa Competizione`, `Le Mans Ultimate`, `rFactor 2`, and runs on `Windows` and `Linux`.
+Currently supports `Assetto Corsa Competizione`, `Automobilista 2`, `Le Mans Ultimate`, `rFactor 2`, and runs on `Windows` and `Linux`.
 
 [Download](https://github.com/TinyPedal/TinyPedal/releases) -
 [Quick Start](#quick-start) -
@@ -24,6 +24,7 @@ Currently supports `Assetto Corsa Competizione`, `Le Mans Ultimate`, `rFactor 2`
 | API | Windows | Linux |
 |:-:|:-:|:-:|
 | [Assetto Corsa Competizione](#setup-for-assetto-corsa-competizione) | No plugin required | Requires third-party plugin |
+| [Automobilista 2](#setup-for-automobilista-2) | No plugin required | Requires third-party plugin |
 | [Le Mans Ultimate](#setup-for-le-mans-ultimate) | No plugin required | Requires third-party plugin |
 | [rFactor 2](#setup-for-rfactor-2) | rF2SharedMemoryMapPlugin | rF2SharedMemoryMapPlugin(Wine) |
 
@@ -59,6 +60,21 @@ Note, make sure game is closed before editing.
 Additional notes:
 * `"connectionPassword"` and `"commandPassword"` values in `broadcasting.json` file should be left blank.
 * `"updListenerPort"` value in `broadcasting.json` file can be set to different number than `9000`, as long as it matches `URL Port` value from `API` config. Please refer to [Assetto Corsa Competizione API](https://github.com/TinyPedal/TinyPedal/wiki/User-Guide#assetto-corsa-competizione-api) section in User Guide for details.
+
+### Setup for Automobilista 2
+---
+
+#### Windows
+
+* There is no plugin required for accessing AMS2's built-in `Sharedmemory API` on Windows. However, make sure `Shared Memory` option is set to `Project CARS 2` from in game `Options` -> `System` page.
+
+#### Linux
+
+* AMS2's built-in `Sharedmemory API` can be selected on Linux, but may require third-party plugin to access, see [discussion #9](https://github.com/TinyPedal/TinyPedal/issues/9) for info.
+
+#### Limitations
+
+AMS2's `Sharedmemory API` provides less data than other supported sims. Data not provided by game include: team name, tyre load, camber & toe, brake wear, location based damage, downforce, weather forecast, track wetness, track time (time of day), and steering wheel rotation range (set `manual_steering_range` option in steering related Widgets instead). Pit stop counts and opponent current lap time are calculated by TinyPedal.
 
 ### Setup for Le Mans Ultimate
 ---

@@ -500,6 +500,41 @@ Set time delay in seconds to retry connection for UDP API. Value range in `0.5` 
 [**`Back to Top`**](#)
 
 
+## Automobilista 2 API
+**Automobilista 2 API options can be accessed from `Options` while this API is enabled in `API` menu in main window.**
+
+Note, `Shared Memory` option must be set to `Project CARS 2` from in game `Options` -> `System` page.
+
+    access_mode
+Set access mode for API. Mode value `0` uses copy access and additional data check to avoid data desynchronized or interruption issues. Mode value `1` uses direct access, which may result data desynchronized or interruption issues. Default mode is copy access.
+
+    memory_map_prefix
+Set memory map file name prefix for accessing API on Linux.
+
+This option is only provided for compatibility purpose on Linux system, which may be used in conjunction with third party shared memory mapping tools through `wine`.
+
+This option is not used on Windows system. On windows system, the prefix is internally set to `Local\`, changing this option has no effect.
+
+    enable_active_state_override
+Set `true` to enable `active state` manual override. While enabled, `overriding` notification will be shown on API status bar from main window.
+
+    active_state
+This option overrides local player on-track status check, and updates or stops overlay and data processing accordingly. Set `true` to activate state. Set `false` to deactivate state. This option works only when `enable_active_state_override` enabled.
+
+    enable_player_index_override
+Set `true` to enable `player index` manual override.
+
+    player_index
+Set `player index` override for displaying data from specific player. Set value to `-1` for unspecified player.
+
+Note, this option works only when `enable_player_index_override` enabled. This option is automatically set while [Spectate Mode](#spectate-mode) enabled, and should not be set manually.
+
+    character_encoding
+Set character encoding for displaying text in correct encoding. Available encoding: `UTF-8`, `ISO-8859-1`. Default encoding is `UTF-8`.
+
+[**`Back to Top`**](#)
+
+
 ## Le Mans Ultimate API
 **Le Mans Ultimate API options can be accessed from `Options` while this API is enabled in `API` menu in main window.**
 
