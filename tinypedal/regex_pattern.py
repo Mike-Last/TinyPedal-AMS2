@@ -92,6 +92,7 @@ CFG_STRING = (
     # Exact match
     "^bind$|"
     "^connection_password$|"
+    "^friend_names$|"
     "^preset$|"
     "^process_id$|"
     "^version$|"

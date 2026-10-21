@@ -2654,6 +2654,51 @@ Set reference circle line width in pixels.
 [**`Back to Top`**](#)
 
 
+## Friends
+**This widget displays position and lap time info of selected drivers (friends).**
+
+    friend_names
+Set driver names to track, separated by comma, such as `Alice, Bob Smith`. Name matching is case-insensitive. Friends that are not in current session are not shown.
+
+    enable_partial_name_match
+Set `true` to match friend name as part of driver name, for example `bob` matches `[TEAM] Bob Smith`. Set `false` to require exact full name match.
+
+    number_of_friends
+Set maximum number of friends to display. Friends are sorted by overall position.
+
+    show_player
+Show local player row (highlighted) along with friends for comparison.
+
+    show_placeholder_when_empty
+Show placeholder text while no friends found in current session, which keeps widget visible and capturable by other apps (such as OpenKneeboard). Requires `show_driver_name` enabled.
+
+    placeholder_text
+Set placeholder text. Default is `no friends online`.
+
+    show_position
+Show overall position standings.
+
+    show_driver_name
+Show driver name.
+
+    driver_name_shorten
+Shorten driver name, such as `Bob Smith` to `B. Smith`.
+
+    driver_name_uppercase
+Show driver name in uppercase.
+
+    driver_name_width
+Set driver name display width, in characters.
+
+    show_laptime
+Show driver's last lap time. Invalid lap time is preceded by asterisk mark, such as *1:23.54.
+
+    show_best_laptime
+Show driver's best lap time from current session.
+
+[**`Back to Top`**](#)
+
+
 ## Fuel
 **This widget displays fuel usage info.**
 
