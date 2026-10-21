@@ -1,0 +1,208 @@
+name: Upstream sync and build
+
+# Keeps this fork on top of TinyPedal/TinyPedal. Every few hours it looks at the latest upstream
+# release; when one has not been merged yet it merges the release tag into main, builds, and only if the
+# build passes pushes the merge and publishes a release of this fork with the build attached. A merge
+# conflict or a build failure opens an issue instead of touching main. Pushes to main and manual runs just
+# build (a manual run also publishes a release). A scheduled run with no new upstream release builds nothing.
+
+on:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Skip the upstream check and just build what is on main
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: TinyPedal/TinyPedal
+
+  # the merge step adds an "upstream" remote, and the gh CLI resolves the repo to
+  # act on from the remotes - preferring "upstream" over "origin". Without this,
+  # gh release/issue commands target the upstream repo and fail with a 403, because
+  # the workflow token is only valid for this one.
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  sync-and-build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Check for a new upstream release
+        id: upstream
+        if: github.event_name != 'push' && inputs.build_only != true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh api "repos/$env:UPSTREAM_REPO/releases/latest" | ConvertFrom-Json
+          $tag = $release.tag_name
+          git fetch origin --tags --quiet
+          $already = git tag --list "upstream-merged/$tag"
+          "tag=$tag" | Out-File $env:GITHUB_OUTPUT -Append
+          "url=$($release.html_url)" | Out-File $env:GITHUB_OUTPUT -Append
+          if ($already) {
+            "new=false" | Out-File $env:GITHUB_OUTPUT -Append
+            Write-Host "Upstream release $tag is already merged"
+          } else {
+            "new=true" | Out-File $env:GITHUB_OUTPUT -Append
+            Write-Host "Upstream release $tag is new"
+          }
+
+      - name: Merge the upstream release
+        id: merge
+        if: steps.upstream.outputs.new == 'true'
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.upstream.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/$env:UPSTREAM_REPO.git"
+          git fetch upstream "refs/tags/${tag}:refs/tags/${tag}" --quiet
+          git merge --no-ff --no-edit -m "Merge upstream release $tag" "refs/tags/$tag"
+          if ($LASTEXITCODE -ne 0) {
+            $conflicts = (git diff --name-only --diff-filter=U) -join "`n"
+            git merge --abort
+            "conflicts<<EOF`n$conflicts`nEOF" | Out-File $env:GITHUB_OUTPUT -Append
+            Write-Host "::error::Merge of upstream $tag conflicts in:`n$conflicts"
+            exit 1
+          }
+          # the release may move the thirdparty submodules
+          git submodule update --init --recursive
+
+      - name: Setup Python 3.10
+        if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        uses: actions/setup-python@v5
+        with:
+          # PySide2 5.15 (the version upstream builds with) has no wheels past Python 3.10
+          python-version: '3.10'
+
+      - name: Install build dependencies
+        if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        shell: pwsh
+        run: |
+          python -m pip install --quiet PySide2==5.15.2.1 psutil==6.1.1 py2exe==0.14.2.0 pytest
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Test
+        id: test
+        if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_ams2_connector.py -q -p no:cacheprovider
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Build
+        id: build
+        if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        shell: pwsh
+        run: |
+          python freeze_py2exe.py -c
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $exe = "dist\TinyPedal\tinypedal.exe"
+          if (-not (Test-Path $exe)) { Write-Host "::error::build output not found"; exit 1 }
+
+          # smoke test: the exe must start and stay up (a missing Qt DLL fails here, not on the rig)
+          $log = "$env:APPDATA\tinypedal.log"
+          Remove-Item $log -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath (Resolve-Path $exe) -WorkingDirectory "dist\TinyPedal" -PassThru
+          Start-Sleep -Seconds 15
+          $alive = -not $p.HasExited
+          if ($alive) { Stop-Process -Id $p.Id -Force }
+          if (Test-Path $log) { Get-Content $log; Write-Host "::error::the exe logged a startup error"; exit 1 }
+          if (-not $alive) { Write-Host "::error::the exe exited during startup (code $($p.ExitCode))"; exit 1 }
+          # drop the settings the smoke test created, so the zip only carries program files
+          Get-ChildItem "dist\TinyPedal" -Directory | Where-Object { $_.Name -notin 'docs', 'images', 'lib', 'mediaservice', 'platforms' } | Remove-Item -Recurse -Force
+
+          $versionFile = Get-Content tinypedal\version.py -Raw
+          $version = [regex]::Match($versionFile, '__version__\s*=\s*"([^"]+)"').Groups[1].Value
+          $dev = [regex]::Match($versionFile, 'DEVELOPMENT\s*=\s*"([^"]*)"').Groups[1].Value
+          if ($dev) { $version = "$version-$dev" }
+          $zip = "TinyPedal-ams2-$version.zip"
+          Compress-Archive -Path "dist\TinyPedal\*" -DestinationPath $zip -CompressionLevel Optimal
+          "version=$version" | Out-File $env:GITHUB_OUTPUT -Append
+          "zip=$zip" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Built TinyPedal $version -> $zip"
+
+      - name: Upload build artifact
+        if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.zip }}
+          path: ${{ steps.build.outputs.zip }}
+          if-no-files-found: error
+          # the release carries the zip long-term; this copy is only for inspecting a run
+          retention-days: 7
+
+      - name: Push the merge to main
+        if: steps.merge.outcome == 'success'
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.upstream.outputs.tag }}"
+          git tag "upstream-merged/$tag"
+          git push origin HEAD:main
+          git push origin "upstream-merged/$tag"
+
+      - name: Publish a release of this fork
+        if: steps.merge.outcome == 'success' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.build.outputs.version }}"
+          $zip = "${{ steps.build.outputs.zip }}"
+          $upstreamTag = "${{ steps.upstream.outputs.tag }}"
+          $upstreamUrl = "${{ steps.upstream.outputs.url }}"
+          # upstream keeps one version string across dev builds, so the run number keeps tags unique
+          $tag = "ams2-$version-${{ github.run_number }}"
+          $how = "Unzip into its own folder (or let SimRig Manager install it) and run tinypedal.exe. Keep user data outside the install folder, see FORK-AMS2.md."
+          if ($upstreamTag) {
+            $title = "TinyPedal $version + AMS2 (upstream $upstreamTag)"
+            $notes = "Fork build of TinyPedal with the Automobilista 2 API and the Friends widget, on top of upstream release [$upstreamTag]($upstreamUrl).`n`n$how"
+          } else {
+            $title = "TinyPedal $version + AMS2"
+            $notes = "Fork build of TinyPedal with the Automobilista 2 API and the Friends widget, from the current main branch.`n`n$how"
+          }
+          gh release create $tag $zip --title $title --notes $notes --latest
+
+      - name: Open an issue when the merge or build failed
+        if: failure() && (steps.merge.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.upstream.outputs.tag }}"
+          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if ("${{ steps.merge.outcome }}" -eq "failure") {
+            $title = "Upstream release $tag does not merge cleanly"
+            $body = "Merging upstream release $tag into main hit conflicts in:`n`n``````n${{ steps.merge.outputs.conflicts }}`n``````n`nMain was left untouched. Merge it by hand (git fetch upstream; git merge $tag), resolve, push, then tag the merge with upstream-merged/$tag so the workflow stops retrying.`n`nRun: $runUrl"
+          } else {
+            $title = "Build failed" + $(if ($tag) { " after merging upstream release $tag" } else { " on main" })
+            $body = "The tests or the build failed. Main was left untouched.`n`nRun: $runUrl"
+          }
+          $existing = gh issue list --state open --search "in:title `"$title`"" --json number --jq '.[0].number'
+          if ($existing) {
+            gh issue comment $existing --body "Failed again: $runUrl"
+          } else {
+            gh issue create --title $title --body $body
+          }
