@@ -188,8 +188,13 @@ def build_exe(dist_path: str) -> None:
         f"{PYTHON_PATH}/Lib/site-packages/PySide2/plugins/mediaservice/dsengine.dll",
         f"{PYTHON_PATH}/Lib/site-packages/PySide2/plugins/mediaservice/wmfengine.dll",
     ]
+    QT_LIBRARIES = [
+        # Required by pyside2.abi3.dll, not auto-detected by py2exe 0.14
+        f"{PYTHON_PATH}/Lib/site-packages/PySide2/Qt5Qml.dll",
+    ]
     BUILD_DATA_FILES = [
         ("", APP_FILES),
+        ("lib", QT_LIBRARIES),
         (FILE.PATH_DOC, DOCUMENT_FILES),
         (FILE.PATH_THIRDPARTYLICENSES, glob(f"{FILE.PATH_THIRDPARTYLICENSES}*")),
         (FILE.PATH_IMAGE, IMAGE_FILES),
