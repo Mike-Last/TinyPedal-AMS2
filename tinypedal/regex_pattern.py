@@ -92,7 +92,7 @@ CFG_STRING = (
     # Exact match
     "^bind$|"
     "^connection_password$|"
-    "^friend_names$|"
+    "^watched_driver_names$|"
     "^preset$|"
     "^process_id$|"
     "^version$|"

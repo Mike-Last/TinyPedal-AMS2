@@ -718,13 +718,7 @@ class Realtime(Overlay):
     def timerEvent(self, event):
         """Update when vehicle on track"""
         player_idx = minfo.vehicles.playerIndex
-        relative_list = relative_data(
-            minfo.relative.relativeAhead,
-            minfo.relative.relativeBehind,
-            player_idx,
-            self.max_veh_front,
-            self.max_veh_behind,
-        )
+        relative_list = self.relative_list(player_idx)
         plr_veh_info = minfo.vehicles.dataSet[player_idx]
         in_race = api.read.session.in_race()
 
@@ -830,6 +824,16 @@ class Realtime(Overlay):
             # Lift and coast time
             if self.wcfg["show_lift_and_coast_time"]:
                 self.update_lic(self.bars_lic[idx], veh_info.licoTimer.elapsed, veh_info.licoTimer.idling, hi_player, state)
+
+    def relative_list(self, player_idx: int):
+        """Relative rows (time gap, vehicle index), ahead, player, behind"""
+        return relative_data(
+            minfo.relative.relativeAhead,
+            minfo.relative.relativeBehind,
+            player_idx,
+            self.max_veh_front,
+            self.max_veh_behind,
+        )
 
     # GUI update methods
     def update_pos(self, target, *data):

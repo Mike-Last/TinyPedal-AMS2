@@ -2654,51 +2654,6 @@ Set reference circle line width in pixels.
 [**`Back to Top`**](#)
 
 
-## Friends
-**This widget displays position and lap time info of selected drivers (friends).**
-
-    friend_names
-Set driver names to track, separated by comma, such as `Alice, Bob Smith`. Name matching is case-insensitive. Friends that are not in current session are not shown.
-
-    enable_partial_name_match
-Set `true` to match friend name as part of driver name, for example `bob` matches `[TEAM] Bob Smith`. Set `false` to require exact full name match.
-
-    number_of_friends
-Set maximum number of friends to display. Friends are sorted by overall position.
-
-    show_player
-Show local player row (highlighted) along with friends for comparison.
-
-    show_placeholder_when_empty
-Show placeholder text while no friends found in current session, which keeps widget visible and capturable by other apps (such as OpenKneeboard). Requires `show_driver_name` enabled.
-
-    placeholder_text
-Set placeholder text. Default is `no friends online`.
-
-    show_position
-Show overall position standings.
-
-    show_driver_name
-Show driver name.
-
-    driver_name_shorten
-Shorten driver name, such as `Bob Smith` to `B. Smith`.
-
-    driver_name_uppercase
-Show driver name in uppercase.
-
-    driver_name_width
-Set driver name display width, in characters.
-
-    show_laptime
-Show driver's last lap time. Invalid lap time is preceded by asterisk mark, such as *1:23.54.
-
-    show_best_laptime
-Show driver's best lap time from current session.
-
-[**`Back to Top`**](#)
-
-
 ## Fuel
 **This widget displays fuel usage info.**
 
@@ -5017,6 +4972,22 @@ Show fuel bias (unit in laps) that calculated from estimated laps difference bet
 Positive value indicates more laps can be run on fuel than virtual energy; in other words, virtual energy will deplete sooner than fuel. For example, a value of `+1.5` indicates that there will be `1.5 laps` of extra fuel remaining after virtual energy depleted.
 
 Note, depleting virtual energy could result a `Stop-Go` penalty in `LMU`; while running out of fuel means no power for vehicle and would result retirement from race. So it is a good idea to keep fuel bias close to `0.0`, and slightly towards positive side to avoid depleting fuel before virtual energy.
+
+[**`Back to Top`**](#)
+
+
+## Watchlist
+**This widget displays relative info of watched drivers only, such as friends or other notable drivers.**
+
+It is a [Relative](#relative) widget that only shows the drivers named in `watched_driver_names` and the local player, and has all the same options. Each watched driver is placed ahead or behind the player, whichever relative time gap is smaller, same as in Relative. Rows are limited by `additional_players_front` and `additional_players_behind` (3 ahead and 3 behind by default); if more watched drivers are on track, the nearest ones are shown. The player row is always shown, so the widget stays visible (and capturable by other apps such as OpenKneeboard) when no watched driver is in session.
+
+    watched_driver_names
+Set driver names to watch, separated by comma, such as `Alice, Bob Smith`. Name matching is case-insensitive.
+
+    enable_partial_name_match
+Set `true` to match watched name as part of driver name, for example `bob` matches `[TEAM] Bob Smith` (and also `Bobby`). Set `false` to require exact full name match.
+
+Note, `show_vehicle_in_garage` option is shared with the Relative widget, as it applies to the relative data module.
 
 [**`Back to Top`**](#)
 

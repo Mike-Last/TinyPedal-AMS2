@@ -4,9 +4,10 @@ This is a private fork of [TinyPedal/TinyPedal](https://github.com/TinyPedal/Tin
 
 - **Automobilista 2 API** (`tinypedal/adapter/ams2_*.py`): reads AMS2's built-in shared memory. In game,
   set `Options -> System -> Shared Memory` to `Project CARS 2`, then pick `API -> Automobilista 2`.
-- **Friends widget** (`tinypedal/widget/friends.py`): position, last and best lap of the drivers named in
-  its `friend_names` option. Shows a placeholder row while no friend is in the session, so the window stays
-  capturable by OpenKneeboard.
+- **Watchlist widget** (`tinypedal/widget/watchlist.py`): a Relative widget that only shows the drivers
+  named in its `watched_driver_names` option (friends or other notable drivers) plus the player, with every
+  Relative option. It subclasses the Relative widget through a small `relative_list()` hook in `relative.py`,
+  and its defaults are copied from Relative's, so new upstream Relative options carry over.
 - **Build fix**: `Qt5Qml.dll` is bundled by `freeze_py2exe.py`, without it the py2exe build fails at startup.
 
 See the README and `docs/customization.md` for what the AMS2 API supports and what the game does not provide.
