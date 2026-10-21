@@ -146,6 +146,8 @@ jobs:
 
       - name: Upload build artifact
         if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
+        # only a convenience copy (the release carries the zip), so a full artifact quota must not block a release
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.build.outputs.zip }}
