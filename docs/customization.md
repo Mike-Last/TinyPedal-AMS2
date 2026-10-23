@@ -2026,13 +2026,7 @@ For example, if `brake thickness` is `40`mm, and `failure thickness` is `25`mm, 
 
 Since brake failure thickness threshold data is not available from game API, it requires testing to find out, and may vary from vehicle to vehicle. Front brake failure thickness threshold can be different from rear brake. Thickness threshold value should not exceed brake maximum thickness, otherwise brake wear readings will not be displayed correctly.
 
-Note, failure thickness values are automatically saved to `brakes.json` preset when brakes failed, and most recent brake failures are logged and can be found in [Show Log](#console-log) dialog from `Help` menu.
-
-**Tips for testing failure thickness:**
-
-Before start, make sure vehicle brand data is imported via [Vehicle Brand Editor](#vehicle-brand-editor). This is necessary to save brake failure thickness settings per vehicle brand.
-
-First, set all `brake duct` settings to `closed` in car setup, then keeps brakes on while driving at around 100kph speed until brakes failed (use brake bias to control front and rear wear rate), and failure thickness value will be automatically saved for this vehicle. Be aware that testing may take a very long time for some vehicles.
+See Wiki Appendix for common vehicle's brake failure reference table.
 
     show_remaining
 Show total remaining brake in percentage that changes color according to wear. A `FAIL` text will be shown on failed brakes.
@@ -4099,11 +4093,14 @@ Show remaining virtual energy reading in percentage from each driver, with 4 dif
 Note, for vehicle without virtual energy, remaining fuel (only if available) will be displayed instead. If fuel data is not available from game API, then nothing will be displayed.
 
     energy_remaining_decimal_places
-Set additional decimals to be displayed.
+Set additional decimals to be displayed. Note, decimal place accuracy depends on game API data accuracy, which may have certain amount margin of error.
 
-**Important notes on decimal place accuracy:**
+    show_energy_usage, show_last_energy_usage, show_average_energy_usage
+Show last lap and average five laps energy usage.
 
-Currently due to known limitation from game API (as explained in User Guide), energy remaining readings from game API does not grant decimal place accuracy. The margin of error from this option can be as high as 1.0% per lap, which may not provide more accuracy than without decimals.
+Note, both `show_last_energy_usage` and `show_average_energy_usage` options are optional. However if both options are disabled, last lap energy usage will be displayed instead.
+
+For vehicle without virtual energy, fuel usage (only if available) will be displayed instead.
 
     show_vehicle_integrity
 Show opponent vehicle integrity reading.

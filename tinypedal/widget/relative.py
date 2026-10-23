@@ -61,6 +61,8 @@ class Realtime(Overlay):
         self.gap_decimals = max(int(self.wcfg["decimal_places_time_gap"]), 0)
         self.nrg_decimals = max(int(self.wcfg["decimal_places_energy_remaining"]), 0)
         self.nrg_width = 3 + self.nrg_decimals + (self.nrg_decimals > 0)
+        self.use_decimals = max(int(self.wcfg["decimal_places_energy_usage"]), 1)
+        self.use_width = 1 + self.use_decimals + (self.use_decimals > 0)
 
         # Max display players
         min_base_veh = 3
@@ -518,6 +520,37 @@ class Realtime(Overlay):
                 row_start=row_start,
                 column=self.wcfg["display_order_energy_remaining"],
             )
+        # Energy usage
+        if self.wcfg["show_energy_usage"]:
+            self.bar_style_use = (
+                (
+                    self.wcfg["font_color_energy_usage"],
+                    self.wcfg["background_color_energy_usage"],
+                ),
+                (
+                    self.wcfg["font_color_player_energy_usage"],
+                    self.wcfg["background_color_player_energy_usage"],
+                ),
+            )
+            min_use_width = self.use_width + (
+                self.wcfg["show_last_energy_usage"]
+                and self.wcfg["show_average_energy_usage"]
+            ) * (1 + self.use_width)
+            self.bars_use = self.set_rawtext(
+                padding=bar_padx,
+                width=min_use_width * font_m.width,
+                fixed_height=font_m.height,
+                offset_y=font_m.voffset,
+                fg_color=self.bar_style_use[0][0],
+                bg_color=self.bar_style_use[0][1],
+                count=self.veh_range,
+            )
+            self.set_grid_layout_table_column(
+                layout=layout,
+                targets=self.bars_use,
+                row_start=row_start,
+                column=self.wcfg["display_order_energy_usage"],
+            )
         # Vehicle integrity
         if self.wcfg["show_vehicle_integrity"]:
             self.bar_style_dmg = (
@@ -717,6 +750,8 @@ class Realtime(Overlay):
 
     def timerEvent(self, event):
         """Update when vehicle on track"""
+        _option = self.wcfg  # reduce lookup in loop
+
         player_idx = minfo.vehicles.playerIndex
         relative_list = self.relative_list(player_idx)
         plr_veh_info = minfo.vehicles.dataSet[player_idx]
@@ -737,38 +772,38 @@ class Realtime(Overlay):
             # Get vehicle dataset
             veh_info = minfo.vehicles.dataSet[rel_idx]
             # Highlighted player
-            hi_player = self.wcfg["show_player_highlighted"] and veh_info.isPlayer
+            hi_player = _option["show_player_highlighted"] and veh_info.isPlayer
             # Check whether is lapped
             is_lapped = veh_info.isLapped
             # Driver position
-            if self.wcfg["show_position"]:
+            if _option["show_position"]:
                 self.update_pos(self.bars_pos[idx], veh_info.positionOverall, is_lapped, hi_player, state)
             # Driver position change
-            if self.wcfg["show_position_change"]:
-                if self.wcfg["show_position_change_in_class"]:
+            if _option["show_position_change"]:
+                if _option["show_position_change_in_class"]:
                     pos_diff = veh_info.qualifyInClass - veh_info.positionInClass
                 else:
                     pos_diff = veh_info.qualifyOverall - veh_info.positionOverall
                 self.update_pgl(self.bars_pgl[idx], pos_diff, hi_player, state)
             # Driver name
-            if self.wcfg["show_driver_name"]:
+            if _option["show_driver_name"]:
                 self.update_drv(self.bars_drv[idx], veh_info.driverName, is_lapped, hi_player, state)
             # Vehicle name
-            if self.wcfg["show_vehicle_name"]:
-                if self.wcfg["show_vehicle_brand_as_name"]:
+            if _option["show_vehicle_name"]:
+                if _option["show_vehicle_brand_as_name"]:
                     vehicle_name = veh_info.brandName
                 else:
                     vehicle_name = veh_info.vehicleName
                 self.update_veh(self.bars_veh[idx], vehicle_name, is_lapped, hi_player, state)
             # Brand logo
-            if self.wcfg["show_brand_logo"]:
+            if _option["show_brand_logo"]:
                 self.update_brd(self.bars_brd[idx], veh_info.brandName, hi_player, state)
             # Time gap
-            if self.wcfg["show_time_gap"]:
+            if _option["show_time_gap"]:
                 self.update_gap(self.bars_gap[idx], rel_time_gap, hi_player, state)
             # Vehicle laptime
-            if self.wcfg["show_laptime"]:
-                if self.wcfg["show_pitstop_duration_while_requested_pitstop"] and plr_veh_info.pitRequested:
+            if _option["show_laptime"]:
+                if _option["show_pitstop_duration_while_requested_pitstop"] and plr_veh_info.pitRequested:
                     laptime = self.set_pittime(veh_info.inPit, veh_info.pitTimer.elapsed)
                     is_class_best = False
                 elif veh_info.pitTimer.pitting:
@@ -779,50 +814,58 @@ class Realtime(Overlay):
                     is_class_best = veh_info.isClassFastestLastLap
                 self.update_lpt(self.bars_lpt[idx], laptime, is_class_best, hi_player, state)
             # Vehicle best laptime
-            if self.wcfg["show_best_laptime"]:
-                if in_race and self.wcfg["show_best_laptime_from_recent_laps_in_race"]:
+            if _option["show_best_laptime"]:
+                if in_race and _option["show_best_laptime_from_recent_laps_in_race"]:
                     laptime = veh_info.lapTimeHistory.best
                 else:
                     laptime = veh_info.bestLapTime
                 self.update_blp(self.bars_blp[idx], laptime, hi_player, state)
             # Vehicle average laptime
-            if self.wcfg["show_average_laptime"]:
+            if _option["show_average_laptime"]:
                 self.update_alp(self.bars_alp[idx], veh_info.lapTimeHistory.average, hi_player, state)
             # Position in class
-            if self.wcfg["show_position_in_class"]:
+            if _option["show_position_in_class"]:
                 self.update_pic(self.bars_pic[idx], veh_info.positionInClass, veh_info.vehicleClass, hi_player, state)
             # Vehicle class
-            if self.wcfg["show_class"]:
+            if _option["show_class"]:
                 self.update_cls(self.bars_cls[idx], veh_info.vehicleClass, state)
             # Vehicle in pit
-            if self.wcfg["show_pit_status"]:
+            if _option["show_pit_status"]:
                 self.update_pit(self.bars_pit[idx], veh_info.inPit, veh_info.isYellow, veh_info.isFinished, state)
             # Tyre compound
-            if self.wcfg["show_tyre_compound"]:
+            if _option["show_tyre_compound"]:
                 self.update_tcp(self.bars_tcp[idx], veh_info.tireCompoundName, hi_player, state)
             # Pitstop count
-            if self.wcfg["show_pitstop_count"]:
+            if _option["show_pitstop_count"]:
                 self.update_psc(self.bars_psc[idx], veh_info.numPitStops, veh_info.pitRequested, hi_player, state)
             # Remaining energy
-            if self.wcfg["show_energy_remaining"]:
+            if _option["show_energy_remaining"]:
                 self.update_nrg(self.bars_nrg[idx], veh_info.energyRemaining, hi_player, state)
+            # Energy usage
+            if _option["show_energy_usage"]:
+                nrg_usage = veh_info.energyHistory.used
+                nrg_average = veh_info.energyHistory.average
+                if nrg_usage <= 0:
+                    nrg_usage = veh_info.fuelHistory.used
+                    nrg_average = veh_info.fuelHistory.average
+                self.update_use(self.bars_use[idx], nrg_usage, nrg_average, hi_player, state)
             # Vehicle integrity
-            if self.wcfg["show_vehicle_integrity"]:
+            if _option["show_vehicle_integrity"]:
                 self.update_dmg(self.bars_dmg[idx], veh_info.vehicleIntegrity, hi_player, state)
             # Incidents
-            if self.wcfg["show_incidents"]:
+            if _option["show_incidents"]:
                 self.update_icd(self.bars_icd[idx], veh_info.incidents, hi_player, state)
             # Track limits points
-            if self.wcfg["show_track_limits_points"]:
+            if _option["show_track_limits_points"]:
                 self.update_tlp(self.bars_tlp[idx], veh_info.trackLimitsPoints, hi_player, state)
             # Stint laps
-            if self.wcfg["show_stint_laps"]:
+            if _option["show_stint_laps"]:
                 self.update_stl(self.bars_stl[idx], veh_info.currentStintLaps, veh_info.estimatedStintLaps, hi_player, state)
             # Speed trap
-            if self.wcfg["show_speed_trap"]:
+            if _option["show_speed_trap"]:
                 self.update_spd(self.bars_spd[idx], veh_info.speedTrap.speed, hi_player, state)
             # Lift and coast time
-            if self.wcfg["show_lift_and_coast_time"]:
+            if _option["show_lift_and_coast_time"]:
                 self.update_lic(self.bars_lic[idx], veh_info.licoTimer.elapsed, veh_info.licoTimer.idling, hi_player, state)
 
     def relative_list(self, player_idx: int):
@@ -1112,11 +1155,37 @@ class Realtime(Overlay):
             if not data[-1]:
                 text = ""
             elif ve <= -1:
-                text = "-" * self.nrg_width
+                text = DATA.TEXT_PLACEHOLDER * self.nrg_width
             else:
                 text = f"{ve:0{self.nrg_width}.{self.nrg_decimals}%}"[:self.nrg_width]
             target.text = text
             target.fg, target.bg = self.bar_style_nrg[color_index]
+            target.update()
+
+    def update_use(self, target, *data):
+        """Energy usage"""
+        if target.last != data:
+            target.last = data
+            text = ""
+            if data[-1]:
+                if self.wcfg["show_last_energy_usage"] or not self.wcfg["show_average_energy_usage"]:
+                    used = data[0]
+                    if used <= 0:
+                        text = DATA.TEXT_PLACEHOLDER * self.use_width
+                    else:
+                        text = f"{used * 100:.{self.use_decimals}f}"[:self.use_width]
+                if self.wcfg["show_average_energy_usage"]:
+                    average = data[1]
+                    if average <= 0:
+                        text_avg = DATA.TEXT_PLACEHOLDER * self.use_width
+                    else:
+                        text_avg = f"{average * 100:.{self.use_decimals}f}"[:self.use_width]
+                    if text:
+                        text = f"{text}/{text_avg}"
+                    else:
+                        text = text_avg
+            target.text = text
+            target.fg, target.bg = self.bar_style_use[data[2]]
             target.update()
 
     def update_dmg(self, target, *data):
@@ -1159,8 +1228,6 @@ class Realtime(Overlay):
                 color_index = 0
             if not data[-1]:
                 text = ""
-            elif score <= 0:
-                text = "--"
             else:
                 text = f"x{score:d}"
             target.text = text
