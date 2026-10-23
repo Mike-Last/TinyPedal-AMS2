@@ -321,6 +321,13 @@ class SyncData:
                     update_delay = 0.01
                     self.paused = data_freezed = False
                     logger.info("sharedmemory: UPDATING: resumed, game state %s", data.mGameState)
+                    # Each version only appends fields, so a mismatch is reported but not rejected
+                    if data.mVersion != AMS2Constants.SHARED_MEMORY_VERSION:
+                        logger.warning(
+                            "sharedmemory: version %s, expected %s, data added in other versions may be invalid",
+                            data.mVersion,
+                            AMS2Constants.SHARED_MEMORY_VERSION,
+                        )
                 else:
                     continue
             elif not in_game:
@@ -381,6 +388,7 @@ class AMS2Info:
         "_state_override",
         "_active_state",
         "_last_damage",
+        "_last_collision",
         "_last_impact_time",
         "_last_sector_time",
     )
@@ -392,6 +400,7 @@ class AMS2Info:
         self._state_override = False
         self._active_state = False
         self._last_damage = 0.0
+        self._last_collision = (INVALID_INDEX, 0.0)
         self._last_impact_time = 0.0
         self._last_sector_time = LastSectorTime()
 
@@ -457,13 +466,19 @@ class AMS2Info:
 
     @property
     def ams2LastImpactTime(self) -> float:
-        """AMS2 player last impact time stamp, estimated from damage changes"""
+        """AMS2 player last impact time stamp, estimated from damage changes & opponent collisions"""
         data = self._sync.player_data
         damage = data.mAeroDamage + data.mEngineDamage + sum(data.mSuspensionDamage)
         if self._last_damage != damage:
             if self._last_damage < damage:
                 self._last_impact_time = self._sync.elapsed_time
             self._last_damage = damage
+        # Opponent collision is reported even with damage disabled
+        collision = data.mLastOpponentCollisionIndex, data.mLastOpponentCollisionMagnitude
+        if self._last_collision != collision:
+            if collision[0] >= 0 and collision[1] > 0:
+                self._last_impact_time = self._sync.elapsed_time
+            self._last_collision = collision
         if self._last_impact_time > self._sync.elapsed_time:  # session reset
             self._last_impact_time = 0.0
         return self._last_impact_time

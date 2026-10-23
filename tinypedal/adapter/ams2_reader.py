@@ -193,12 +193,24 @@ class ElectricMotor(_reader.ElectricMotor, DataAdapter):
     __slots__ = ()
 
     def state(self, index: int | None = None) -> int:
-        """Motor state, 0 = n/a, 1 = off, 2 = drain, 3 = regen"""
+        """Motor state, 0 = n/a, 1 = off, 2 = drain, 3 = regen
+
+        AMS2 only reports boost (push-to-pass or KERS), active boost is used as drain state.
+        """
+        if not self.is_player_index(index):
+            return 0
+        data = self.shmm.ams2Data
+        if data.mBoostActive:
+            return 2
+        if data.mBoostAmount > 0:
+            return 1
         return 0
 
     def battery_charge(self, index: int | None = None) -> float:
-        """Battery charge (fraction)"""
-        return 0.0
+        """Battery charge (fraction), remaining boost amount"""
+        if not self.is_player_index(index):
+            return 0.0
+        return min(max(rmnan(self.shmm.ams2Data.mBoostAmount) * 0.01, 0.0), 1.0)
 
     def rpm(self, index: int | None = None) -> float:
         """Motor RPM (rev per minute)"""
@@ -247,8 +259,11 @@ class Engine(_reader.Engine, DataAdapter):
         return rmnan(self.shmm.ams2Data.mEngineTorque)
 
     def turbo(self, index: int | None = None) -> float:
-        """Turbo pressure (Pa)"""
-        return 0.0
+        """Turbo pressure (Pa)
+
+        Documented as fraction but observed as Pa, unset = -1.
+        """
+        return max(rmnan(self.shmm.ams2Data.mTurboBoostPressure), 0.0)
 
     def oil_temperature(self, index: int | None = None) -> float:
         """Oil temperature (Celsius)"""
@@ -518,8 +533,9 @@ class Session(_reader.Session, DataAdapter):
         return rmnan(self.shmm.ams2Data.mAmbientTemperature)
 
     def raininess(self) -> float:
-        """Rain severity (fraction), range 0.0 - 1.0"""
-        return min(max(rmnan(self.shmm.ams2Data.mRainDensity), 0.0), 1.0)
+        """Rain severity (fraction), range 0.0 - 1.0, snow counts as precipitation"""
+        data = self.shmm.ams2Data
+        return min(max(rmnan(data.mRainDensity), rmnan(data.mSnowDensity), 0.0), 1.0)
 
     def wetness(self) -> float:
         """Road wetness set (fraction), not available"""

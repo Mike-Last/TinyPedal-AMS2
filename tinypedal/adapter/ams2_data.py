@@ -169,7 +169,7 @@ class YellowFlagState:
     RACE_HALT = 8
 
 
-# Terrain material index (mTerrain) considered as off road
+# Terrain material index (mTerrain) considered as off road (or beyond track limits)
 TERRAIN_OFFROAD = frozenset((
     6,  # GRASSY_BERMS
     7,  # GRASS
@@ -181,12 +181,17 @@ TERRAIN_OFFROAD = frozenset((
     18,  # BUMPY_DIRT
     22,  # DIRT_BANK
     24,  # DRY_VERGE
+    26,  # GRASSCRETE
     27,  # LONG_GRASS
     28,  # SLOPE_GRASS
+    32,  # ASTROTURF
     33,  # SNOWHALF
     34,  # SNOWFULL
     42,  # ROUGH_SAND_MEDIUM
     43,  # ROUGH_SAND_HEAVY
+    46,  # RUNOFF_ROAD
+    47,  # ILLEGAL_STRIP
+    49,  # PAINT_CONCRETE_ILLEGAL
 ))
 
 _STR = c_char * AMS2Constants.STRING_LENGTH_MAX

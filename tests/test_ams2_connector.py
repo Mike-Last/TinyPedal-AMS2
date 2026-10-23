@@ -11,7 +11,7 @@ from time import sleep
 sys.path.append(".")
 sys.path.append("thirdparty")
 
-from tinypedal.adapter import _reader
+from tinypedal.adapter import _reader, ams2_reader
 from tinypedal.adapter.ams2_connector import SimAMS2
 from tinypedal.adapter.ams2_data import AMS2SharedMemory
 from tinypedal.adapter.ams2_sharedmemory import AMS2Info
@@ -45,6 +45,53 @@ def test_reader():
     finally:
         api.stop()
     assert isinstance(group, _reader.Wheel)
+
+
+def test_reader_values():
+    """Reader converts AMS2 values (as observed from game) to TinyPedal units"""
+    info = AMS2Info()
+    data = AMS2SharedMemory()
+    info._sync.player_data = data
+    engine = ams2_reader.Engine(info)
+    emotor = ams2_reader.ElectricMotor(info)
+    vehicle = ams2_reader.Vehicle(info)
+    wheel = ams2_reader.Wheel(info)
+
+    # Turbo pressure, unset = -1
+    data.mTurboBoostPressure = -1
+    assert engine.turbo() == 0
+    data.mTurboBoostPressure = 31767.4
+    assert round(engine.turbo()) == 31767
+
+    # Boost as electric motor
+    assert emotor.state() == 0
+    data.mBoostAmount = 40
+    assert emotor.state() == 1
+    assert abs(emotor.battery_charge() - 0.4) < 1e-6
+    data.mBoostActive = True
+    assert emotor.state() == 2
+
+    # Impact from opponent collision
+    info._sync.elapsed_time = 10.0
+    data.mLastOpponentCollisionIndex = -1
+    assert vehicle.impact_time() == 0
+    data.mLastOpponentCollisionIndex = 3
+    data.mLastOpponentCollisionMagnitude = 2.5
+    assert vehicle.impact_time() == 10.0
+    info._sync.elapsed_time = 20.0
+    assert vehicle.impact_time() == 10.0  # unchanged collision
+    data.mLastOpponentCollisionMagnitude = 4.0
+    assert vehicle.impact_time() == 20.0
+
+    # Snow counts as precipitation
+    session = ams2_reader.Session(info)
+    data.mRainDensity = 0.2
+    data.mSnowDensity = 0.5
+    assert session.raininess() == 0.5
+
+    # Track limits surfaces count as off road
+    data.mTerrain[:] = (0, 47, 49, 46)
+    assert wheel.offroad() == 3
 
 
 def test_api():
@@ -91,4 +138,5 @@ def test_api():
 if __name__ == "__main__":
     test_struct()
     test_reader()
+    test_reader_values()
     test_api()
