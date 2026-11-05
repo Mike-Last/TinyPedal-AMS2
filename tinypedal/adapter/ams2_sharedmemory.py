@@ -28,9 +28,12 @@ import logging
 import mmap
 import sys
 import threading
+from math import hypot
 from time import monotonic
 
+from ..calculation import rotate_coordinate
 from ..process.timing import LastSectorTime
+from ..validator import infnan_to_zero as rmnan
 from .ams2_data import (
     AMS2Constants,
     AMS2SharedMemory,
@@ -51,6 +54,17 @@ GAME_STATE_RUNNING = frozenset((
     GameState.INGAME_PAUSED,
     GameState.INGAME_INMENU_TIME_TICKING,
 ))
+# Body parts of damage severity, direction in vehicle frame (+x right, +y behind)
+_DIAGONAL = 0.7071067811865476
+BODY_PART_DIRECTIONS = (
+    (-_DIAGONAL, -_DIAGONAL), (0.0, -1.0), (_DIAGONAL, -_DIAGONAL),  # front left, front, front right
+    (-1.0, 0.0), (1.0, 0.0),  # left, right
+    (-_DIAGONAL, _DIAGONAL), (0.0, 1.0), (_DIAGONAL, _DIAGONAL),  # rear left, rear, rear right
+)
+BODY_PARTS = len(BODY_PART_DIRECTIONS)
+MAX_PART_SEVERITY = 2.0  # heavy damage, above is detached
+IMPACT_WINDOW = 0.3  # seconds a velocity change or collision stays linked to a damage rise
+MIN_IMPACT_DELTA_SPEED = 0.5  # m/s velocity change between samples, ignores most normal driving
 
 
 def platform_mmap(name: str, size: int, prefix: str = "") -> mmap.mmap:
@@ -277,6 +291,177 @@ class ParticipantTracker:
             self._pit_mode[index] = pit_mode
 
 
+class DamageTracker:
+    """Track impact time, impact direction and damage location of player vehicle
+
+    AMS2 only reports total aero damage, with no impact or location data, so:
+        - An impact is a rise in damage, or a new opponent collision
+          (reported even with damage disabled).
+        - Impact direction comes from the opponent's position for a collision,
+          otherwise from the largest sudden change in velocity shortly before the impact,
+          as the car is pushed away from where it was hit.
+        - Each rise in aero damage is spread over the body parts that face the impact,
+          so the total of all parts stays at aero damage x 16 (8 parts, max severity 2).
+
+    Directions use the vehicle frame of the radar widget: +x right, +y behind.
+
+    Attributes:
+        timestamp: last impact elapsed time (seconds).
+        position: last impact direction x, y (unit length), (0, 0) = unknown.
+        severity: body part damage severity, 0 = none, 1 = light, 2 = heavy,
+            order: front left, front, front right, left, right, rear left, rear, rear right.
+    """
+
+    __slots__ = (
+        "_player_index",
+        "_aero",
+        "_damage",
+        "_velocity",
+        "_collision",
+        "_direction",
+        "_direction_time",
+        "_direction_strength",
+        "timestamp",
+        "position",
+        "severity",
+    )
+
+    def __init__(self) -> None:
+        self._player_index = INVALID_INDEX
+        self._aero = 0.0
+        self._damage = 0.0
+        self._velocity = (0.0, 0.0)
+        self._collision = (INVALID_INDEX, 0.0)
+        self._direction = (0.0, 0.0)
+        self._direction_time = 0.0
+        self._direction_strength = 0.0
+        self.timestamp = 0.0
+        self.position = (0.0, 0.0)
+        self.severity = (0.0,) * BODY_PARTS
+
+    def reset(self) -> None:
+        """Reset on session or vehicle change, next update starts from current damage"""
+        self._player_index = INVALID_INDEX
+        self.timestamp = 0.0
+        self.position = (0.0, 0.0)
+
+    def update(self, data: AMS2SharedMemory, player_index: int, elapsed_time: float) -> None:
+        """Update impact & damage of player vehicle"""
+        if not 0 <= player_index < MAX_PARTICIPANTS:
+            return
+        aero = min(max(rmnan(data.mAeroDamage), 0.0), 1.0)
+        damage = aero + rmnan(data.mEngineDamage) + sum(map(rmnan, data.mSuspensionDamage))
+        velocity = rmnan(data.mWorldVelocity[0]), -rmnan(data.mWorldVelocity[2])
+        collision = data.mLastOpponentCollisionIndex, data.mLastOpponentCollisionMagnitude
+
+        # First update, or viewing another vehicle, start from its current damage
+        if self._player_index != player_index:
+            self._player_index = player_index
+            self._aero = aero
+            self._damage = damage
+            self._velocity = velocity
+            self._collision = collision
+            self._direction_strength = 0.0
+            self.severity = (aero * MAX_PART_SEVERITY,) * BODY_PARTS
+            return
+
+        yaw = -rmnan(data.mOrientations[player_index][1])  # same as reader orientation_yaw
+        if elapsed_time - self._direction_time > IMPACT_WINDOW:
+            self._direction_strength = 0.0
+
+        # Sudden velocity change, the car is pushed away from the impact
+        delta_x = velocity[0] - self._velocity[0]
+        delta_y = velocity[1] - self._velocity[1]
+        self._velocity = velocity
+        strength = hypot(delta_x, delta_y)
+        if strength >= MIN_IMPACT_DELTA_SPEED and strength > self._direction_strength:
+            self._set_direction(yaw, -delta_x, -delta_y, strength, elapsed_time)
+
+        # Opponent collision, direction of the opponent
+        if self._collision != collision:
+            self._collision = collision
+            opponent_index, magnitude = collision
+            if 0 <= opponent_index < MAX_PARTICIPANTS and opponent_index != player_index and magnitude > 0:
+                player_pos = data.mParticipantInfo[player_index].mWorldPosition
+                opponent_pos = data.mParticipantInfo[opponent_index].mWorldPosition
+                self._set_direction(
+                    yaw,
+                    opponent_pos[0] - player_pos[0],
+                    player_pos[2] - opponent_pos[2],
+                    float("inf"),  # takes priority over velocity change
+                    elapsed_time,
+                )
+                self.timestamp = elapsed_time
+                self.position = self._direction
+
+        has_direction = self._direction_strength > 0
+        # Damage rise
+        if self._damage != damage:
+            if self._damage < damage:
+                self.timestamp = elapsed_time
+                if has_direction:
+                    self.position = self._direction
+            self._damage = damage
+
+        # Aero damage rise spreads over body parts facing the impact, drop (repair) scales all parts
+        if self._aero < aero:
+            self.severity = spread_damage(
+                self.severity,
+                (aero - self._aero) * MAX_PART_SEVERITY * BODY_PARTS,
+                self._direction if has_direction else None,
+            )
+        elif self._aero > aero:
+            scale = aero / self._aero
+            self.severity = tuple(part * scale for part in self.severity)
+        self._aero = aero
+
+    def _set_direction(self, yaw: float, pos_x: float, pos_y: float, strength: float, elapsed_time: float) -> None:
+        """Set impact direction from world x, y offset, rotated to vehicle frame"""
+        dir_x, dir_y = rotate_coordinate(yaw - 3.14159265, pos_x, pos_y)
+        length = hypot(dir_x, dir_y)
+        if length > 0:
+            self._direction = dir_x / length, dir_y / length
+            self._direction_time = elapsed_time
+            self._direction_strength = strength
+
+
+def spread_damage(
+    severity: tuple[float, ...], amount: float, direction: tuple[float, float] | None
+) -> tuple[float, ...]:
+    """Spread damage amount over body parts facing the impact direction
+
+    Parts are weighted by how directly they face the impact, a part only takes damage
+    up to max severity, and any excess goes to the remaining parts.
+    Spread evenly if direction unknown.
+    """
+    if direction is None:
+        weights = [1.0] * BODY_PARTS
+    else:
+        # Ignore parts at (or rounding error from) right angles, which would show as light damage
+        weights = [
+            facing * facing if (facing := direction[0] * part_x + direction[1] * part_y) > 1e-6 else 0.0
+            for part_x, part_y in BODY_PART_DIRECTIONS
+        ]
+    parts = list(severity)
+    while amount > 1e-9:
+        open_parts = [index for index in range(BODY_PARTS) if parts[index] < MAX_PART_SEVERITY]
+        if not open_parts:
+            break
+        total_weight = sum(weights[index] for index in open_parts)
+        if total_weight <= 0:  # parts facing impact are full, spread to the rest
+            weights = [1.0] * BODY_PARTS
+            continue
+        excess = 0.0
+        for index in open_parts:
+            value = parts[index] + amount * weights[index] / total_weight
+            if value > MAX_PART_SEVERITY:
+                excess += value - MAX_PART_SEVERITY
+                value = MAX_PART_SEVERITY
+            parts[index] = value
+        amount = excess
+    return tuple(parts)
+
+
 class SessionCheck:
     """Check session or player vehicle resets
 
@@ -342,6 +527,7 @@ class SyncData:
         "player_data",
         "elapsed_time",
         "tracker",
+        "damage",
     )
 
     def __init__(self) -> None:
@@ -359,6 +545,7 @@ class SyncData:
         self.player_data: AMS2SharedMemory = self.dataset.data
         self.elapsed_time = 0.0
         self.tracker = ParticipantTracker()
+        self.damage = DamageTracker()
 
     def __del__(self):
         logger.info("sharedmemory: GC: SyncData")
@@ -411,6 +598,7 @@ class SyncData:
 
         self.elapsed_time = 0.0
         self.tracker.reset()
+        self.damage.reset()
 
         while not _event_wait(update_delay):
             self.dataset.update()
@@ -462,6 +650,7 @@ class SyncData:
                 self.elapsed_time = 0.0
                 self.resets += 1
                 self.tracker.reset()
+                self.damage.reset()
                 # Signal paused state briefly, so that modules reset previous session data,
                 # as AMS2 may switch session without leaving game state
                 reset_hold_time = mono_time + 1.5
@@ -476,6 +665,8 @@ class SyncData:
                 self.elapsed_time += delta_time
 
             self.tracker.update(data, self.elapsed_time)
+            if self.synced:
+                self.damage.update(data, self.player_index, self.elapsed_time)
 
         logger.info("sharedmemory: UPDATING: thread stopped")
 
@@ -489,9 +680,6 @@ class AMS2Info:
         "_mmap_prefix",
         "_state_override",
         "_active_state",
-        "_last_damage",
-        "_last_collision",
-        "_last_impact_time",
         "_last_sector_time",
     )
 
@@ -501,9 +689,6 @@ class AMS2Info:
         self._mmap_prefix = ""
         self._state_override = False
         self._active_state = False
-        self._last_damage = 0.0
-        self._last_collision = (INVALID_INDEX, 0.0)
-        self._last_impact_time = 0.0
         self._last_sector_time = LastSectorTime()
 
     def __del__(self):
@@ -567,23 +752,9 @@ class AMS2Info:
         )
 
     @property
-    def ams2LastImpactTime(self) -> float:
-        """AMS2 player last impact time stamp, estimated from damage changes & opponent collisions"""
-        data = self._sync.player_data
-        damage = data.mAeroDamage + data.mEngineDamage + sum(data.mSuspensionDamage)
-        if self._last_damage != damage:
-            if self._last_damage < damage:
-                self._last_impact_time = self._sync.elapsed_time
-            self._last_damage = damage
-        # Opponent collision is reported even with damage disabled
-        collision = data.mLastOpponentCollisionIndex, data.mLastOpponentCollisionMagnitude
-        if self._last_collision != collision:
-            if collision[0] >= 0 and collision[1] > 0:
-                self._last_impact_time = self._sync.elapsed_time
-            self._last_collision = collision
-        if self._last_impact_time > self._sync.elapsed_time:  # session reset
-            self._last_impact_time = 0.0
-        return self._last_impact_time
+    def ams2Damage(self) -> DamageTracker:
+        """AMS2 player impact & damage location data"""
+        return self._sync.damage
 
     @property
     def ams2Data(self) -> AMS2SharedMemory:

@@ -71,7 +71,8 @@ uv pip install --python .venv pytest
 ```
 
 `test_ams2_connector.py` covers the AMS2 data structure, unit conversions, session reset detection, and the
-pit stop, grid and lap validity tracking that TinyPedal does itself. With AMS2 installed in the default Steam
+pit stop, grid and lap validity tracking that TinyPedal does itself, and the impact direction and damage
+location it estimates. With AMS2 installed in the default Steam
 folder it also checks every field against the game's own `Support/SharedMemory/.../SharedMemory.h` (set
 `AMS2_SHARED_MEMORY_H` to use another path), otherwise that test is skipped. `test_watchlist.py` covers the
 Watchlist name matching and row selection.

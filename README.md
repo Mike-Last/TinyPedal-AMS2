@@ -85,7 +85,7 @@ Additional notes:
 
 #### Limitations
 
-AMS2's `Sharedmemory API` provides less data than other supported sims. Data not provided by game include: team name, tyre load, camber & toe, brake wear, location based damage, downforce, weather forecast (current temperatures, rain, snow & wind are provided), track wetness, track time (time of day), and steering wheel rotation range (set `manual_steering_range` option in steering related Widgets instead). Pit stop counts and opponent current lap time are calculated by TinyPedal. Hybrid battery related Widgets show the remaining boost (push-to-pass or KERS) amount, as AMS2 does not provide battery charge.
+AMS2's `Sharedmemory API` provides less data than other supported sims. Data not provided by game include: team name, tyre load, camber & toe, brake wear, location based damage (TinyPedal estimates where the car was hit from opponent contact and sudden changes in speed, and spreads aero damage over that part of the car in the `Damage` Widget), downforce, weather forecast (current temperatures, rain, snow & wind are provided), track wetness, track time (time of day), and steering wheel rotation range (set `manual_steering_range` option in steering related Widgets instead). Pit stop counts and opponent current lap time are calculated by TinyPedal. Hybrid battery related Widgets show the remaining boost (push-to-pass or KERS) amount, as AMS2 does not provide battery charge.
 
 ### Setup for Le Mans Ultimate
 ---

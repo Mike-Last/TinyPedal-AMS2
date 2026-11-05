@@ -1041,12 +1041,12 @@ class Vehicle(_reader.Vehicle, DataAdapter):
     def damage_severity(self, index: int | None = None) -> tuple[float, ...]:
         """Damage severity, sort row by row from left to right, top to bottom
 
-        AMS2 does not provide location based damage, use aero damage for all parts.
+        AMS2 does not provide location based damage,
+        aero damage is spread over body parts by estimated impact direction.
         """
         if not self.is_player_index(index):
             return (0.0,) * 8
-        damage = rmnan(self.shmm.ams2Data.mAeroDamage * 2)
-        return (damage,) * 8
+        return self.shmm.ams2Damage.severity
 
     def aero_damage(self, index: int | None = None) -> float:
         """Aerodynamic damage (fraction), -1.0 unavailable, 0.0 no damage, 1.0 totaled"""
@@ -1066,12 +1066,14 @@ class Vehicle(_reader.Vehicle, DataAdapter):
         return False
 
     def impact_time(self, index: int | None = None) -> float:
-        """Last impact time stamp (seconds)"""
-        return self.shmm.ams2LastImpactTime
+        """Last impact time stamp (seconds), estimated from damage changes & opponent collisions"""
+        return self.shmm.ams2Damage.timestamp
 
     def impact_position(self, index: int | None = None) -> tuple[float, float]:
-        """Last impact position x,y coordinates"""
-        return 0.0, 0.0
+        """Last impact position x,y coordinates, estimated impact direction"""
+        if not self.is_player_index(index):
+            return 0.0, 0.0
+        return self.shmm.ams2Damage.position
 
     def setup(self) -> tuple[str, ...]:
         """Car setup data"""

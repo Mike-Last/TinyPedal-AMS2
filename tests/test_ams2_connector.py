@@ -16,6 +16,7 @@ sys.path.append(".")
 sys.path.append("thirdparty")
 
 from tinypedal.adapter import _reader, ams2_reader
+from tinypedal.calculation import rotate_coordinate
 from tinypedal.adapter.ams2_connector import SimAMS2
 from tinypedal.adapter.ams2_data import (
     AMS2ParticipantInfo,
@@ -25,7 +26,13 @@ from tinypedal.adapter.ams2_data import (
     RaceState,
     SessionState,
 )
-from tinypedal.adapter.ams2_sharedmemory import AMS2Info, ParticipantTracker, SessionCheck
+from tinypedal.adapter.ams2_sharedmemory import (
+    AMS2Info,
+    DamageTracker,
+    ParticipantTracker,
+    SessionCheck,
+    spread_damage,
+)
 
 # Game header, override with AMS2_SHARED_MEMORY_H environment variable
 AMS2_HEADER = os.environ.get(
@@ -212,6 +219,143 @@ def test_participant_tracker_follows_drivers():
     assert tracker.pitstops[:3] == [2, 1, 0]
 
 
+def set_world(vector, yaw: float, car_x: float, car_y: float) -> None:
+    """Set world vector from vehicle frame (+x right, +y behind), inverse of the radar's rotation"""
+    world_x, world_y = rotate_coordinate(3.14159265 - yaw, car_x, car_y)
+    vector[0] = world_x
+    vector[2] = -world_y  # lateral axis is -Z, as reader position_lateral
+
+
+def damage_data(yaw: float = 0.7) -> AMS2SharedMemory:
+    """Player at index 0 driving ahead at 50 m/s"""
+    data = AMS2SharedMemory()
+    set_participants(data, "Alice", "Bob")
+    data.mOrientations[0][1] = -yaw  # as reader orientation_yaw
+    set_world(data.mWorldVelocity, yaw, 0.0, -50.0)
+    return data
+
+
+def assert_direction(position, expected_x: float, expected_y: float) -> None:
+    """Impact direction matches within rounding"""
+    assert abs(position[0] - expected_x) < 1e-3 and abs(position[1] - expected_y) < 1e-3, position
+
+
+def test_spread_damage():
+    """Damage spreads over parts facing impact, capped per part, total kept"""
+    # Front: front 50%, front corners 25% each
+    parts = spread_damage((0.0,) * 8, 1.6, (0.0, -1.0))
+    assert [round(part, 6) for part in parts] == [0.4, 0.8, 0.4, 0, 0, 0, 0, 0]
+    # Right side
+    parts = spread_damage((0.0,) * 8, 1.0, (1.0, 0.0))
+    assert parts[4] > parts[2] > 0 and abs(parts[2] - parts[7]) < 1e-9 and parts[3] == 0
+    # Unknown direction
+    assert spread_damage((0.0,) * 8, 0.8, None) == (0.1,) * 8
+    # Full parts spill over to the rest, never over max severity
+    parts = spread_damage((0.0,) * 8, 10.0, (0.0, -1.0))
+    assert max(parts) == 2.0 and abs(sum(parts) - 10.0) < 1e-9
+    parts = spread_damage((2.0,) * 7 + (1.5,), 3.0, (0.0, -1.0))
+    assert parts == (2.0,) * 8
+
+
+def test_damage_tracker_wall_impact():
+    """Sudden stop with damage is a front impact, damage goes to the front"""
+    data = damage_data()
+    tracker = DamageTracker()
+    tracker.update(data, 0, 1.0)
+    tracker.update(data, 0, 1.01)
+    assert tracker.timestamp == 0
+
+    # Hard braking alone (4 g at 100 Hz) does not count as an impact direction
+    set_world(data.mWorldVelocity, 0.7, 0.0, -49.6)
+    tracker.update(data, 0, 1.02)
+    assert tracker._direction_strength == 0
+
+    # Hit the wall ahead, damage registers a frame later
+    set_world(data.mWorldVelocity, 0.7, 0.0, -20.0)
+    tracker.update(data, 0, 1.03)
+    data.mAeroDamage = 0.1
+    tracker.update(data, 0, 1.04)
+    assert tracker.timestamp == 1.04
+    assert_direction(tracker.position, 0.0, -1.0)
+    front_left, front, front_right, left, right, rear_left, rear, rear_right = tracker.severity
+    assert front > front_left > 0 and abs(front_left - front_right) < 1e-6
+    assert left == right == rear_left == rear == rear_right == 0
+    assert abs(sum(tracker.severity) - 1.6) < 1e-6  # aero damage x 16
+
+    # Pushed to the left by a hit on the right
+    set_world(data.mWorldVelocity, 0.7, -8.0, -20.0)
+    tracker.update(data, 0, 2.0)
+    data.mAeroDamage = 0.2
+    tracker.update(data, 0, 2.05)
+    assert_direction(tracker.position, 1.0, 0.0)
+    assert tracker.severity[4] > 0 and tracker.severity[3] == 0
+
+    # Damage rise long after any velocity change has no direction, spreads evenly
+    position = tracker.position
+    before = tracker.severity
+    data.mAeroDamage = 0.25
+    tracker.update(data, 0, 5.0)
+    assert tracker.timestamp == 5.0 and tracker.position == position
+    assert all(abs(after - part - 0.1) < 1e-6 for part, after in zip(before, tracker.severity))
+
+    # Repair scales all parts, keeping their share, and is not an impact
+    before = tracker.severity
+    data.mAeroDamage = 0.125
+    tracker.update(data, 0, 6.0)
+    assert all(abs(after - part * 0.5) < 1e-6 for part, after in zip(before, tracker.severity))
+    assert tracker.timestamp == 5.0
+
+
+def test_damage_tracker_collision():
+    """Opponent collision gives direction of the opponent, over velocity change"""
+    yaw = 2.0
+    data = damage_data(yaw)
+    tracker = DamageTracker()
+    tracker.update(data, 0, 1.0)
+
+    # Opponent hits the rear right while the car is pushed ahead
+    set_world(data.mParticipantInfo[1].mWorldPosition, yaw, 1.0, 4.0)
+    set_world(data.mWorldVelocity, yaw, 0.0, -55.0)
+    data.mLastOpponentCollisionIndex = 1
+    data.mLastOpponentCollisionMagnitude = 3.0
+    tracker.update(data, 0, 2.0)
+    assert tracker.timestamp == 2.0
+    expected = 1 / 17 ** 0.5
+    assert_direction(tracker.position, expected, 4 * expected)
+    data.mAeroDamage = 0.05
+    tracker.update(data, 0, 2.01)
+    assert tracker.severity[6] > 0 and tracker.severity[7] > 0
+    assert tracker.severity[0] == tracker.severity[1] == tracker.severity[2] == 0
+
+    # Collision with an invalid index is ignored
+    data.mLastOpponentCollisionIndex = -1
+    tracker.update(data, 0, 3.0)
+    assert tracker.timestamp == 2.01  # damage rise
+
+
+def test_damage_tracker_resets():
+    """Viewing another vehicle or a session reset starts from its current damage"""
+    data = damage_data()
+    tracker = DamageTracker()
+    data.mAeroDamage = 0.5
+    tracker.update(data, 0, 1.0)  # existing damage, not an impact
+    assert tracker.timestamp == 0 and tracker.severity == (1.0,) * 8
+    data.mAeroDamage = 0.25
+    tracker.update(data, 1, 2.0)  # another vehicle with less damage
+    assert tracker.timestamp == 0 and tracker.severity == (0.5,) * 8
+    tracker.update(data, -1, 3.0)  # not synced, unchanged
+    assert tracker.severity == (0.5,) * 8
+    data.mLastOpponentCollisionIndex = 0
+    data.mLastOpponentCollisionMagnitude = 1.0
+    tracker.update(data, 1, 3.0)
+    assert tracker.timestamp == 3.0
+    tracker.reset()
+    assert tracker.timestamp == 0 and tracker.position == (0.0, 0.0)
+    data.mAeroDamage = 0.0
+    tracker.update(data, 1, 0.5)
+    assert tracker.severity == (0.0,) * 8
+
+
 def test_reader():
     """Every reader method returns without error while game not running"""
     api = SimAMS2()
@@ -258,17 +402,22 @@ def test_reader_values():
     data.mBoostActive = True
     assert emotor.state() == 2
 
-    # Impact from opponent collision
-    info._sync.elapsed_time = 10.0
+    # Impact from opponent collision, reported even with damage disabled
+    damage = info._sync.damage
+    data.mNumParticipants = 4
     data.mLastOpponentCollisionIndex = -1
+    damage.update(data, 0, 5.0)
     assert vehicle.impact_time() == 0
     data.mLastOpponentCollisionIndex = 3
     data.mLastOpponentCollisionMagnitude = 2.5
+    damage.update(data, 0, 10.0)
     assert vehicle.impact_time() == 10.0
-    info._sync.elapsed_time = 20.0
+    damage.update(data, 0, 20.0)
     assert vehicle.impact_time() == 10.0  # unchanged collision
     data.mLastOpponentCollisionMagnitude = 4.0
+    damage.update(data, 0, 20.0)
     assert vehicle.impact_time() == 20.0
+    assert vehicle.impact_position(1) == (0.0, 0.0)  # player only
 
     # Snow counts as precipitation
     session = ams2_reader.Session(info)
