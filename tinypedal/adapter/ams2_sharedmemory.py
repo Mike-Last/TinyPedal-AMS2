@@ -141,6 +141,10 @@ class MMapControl:
 class ParticipantTracker:
     """Track per-participant data that is not provided by API
 
+    Data is stored by participant index, and follows the driver name,
+    so that it stays with the driver if participant indexes change
+    (drivers joining or leaving), and does not pass on to another driver.
+
     Attributes:
         grid: starting grid position, 0 = not recorded.
         lap_start: lap start elapsed time (seconds).
@@ -149,6 +153,9 @@ class ParticipantTracker:
     """
 
     __slots__ = (
+        "_names",
+        "_total",
+        "_departed",
         "_laps",
         "_pit_mode",
         "_invalidated",
@@ -159,6 +166,9 @@ class ParticipantTracker:
     )
 
     def __init__(self) -> None:
+        self._names = [b""] * MAX_PARTICIPANTS
+        self._total = 0
+        self._departed: dict[bytes, tuple] = {}
         self._laps = [-1] * MAX_PARTICIPANTS
         self._pit_mode = [PitMode.NONE] * MAX_PARTICIPANTS
         self._invalidated = [False] * MAX_PARTICIPANTS
@@ -169,14 +179,73 @@ class ParticipantTracker:
 
     def reset(self) -> None:
         """Reset data"""
+        self._total = 0
+        self._departed.clear()
         for index in range(MAX_PARTICIPANTS):
-            self._laps[index] = -1
-            self._pit_mode[index] = PitMode.NONE
-            self._invalidated[index] = False
-            self.grid[index] = 0
-            self.lap_start[index] = 0.0
-            self.last_valid[index] = True
-            self.pitstops[index] = 0
+            self._names[index] = b""
+            self._reset_index(index)
+
+    def _reset_index(self, index: int) -> None:
+        """Reset data of participant index"""
+        self._laps[index] = -1
+        self._pit_mode[index] = PitMode.NONE
+        self._invalidated[index] = False
+        self.grid[index] = 0
+        self.lap_start[index] = 0.0
+        self.last_valid[index] = True
+        self.pitstops[index] = 0
+
+    def _save_index(self, index: int) -> None:
+        """Save data of participant index under driver name, before index changes driver"""
+        name = self._names[index]
+        if name:
+            self._departed[name] = (
+                self._laps[index],
+                self._pit_mode[index],
+                self._invalidated[index],
+                self.grid[index],
+                self.lap_start[index],
+                self.last_valid[index],
+                self.pitstops[index],
+            )
+        self._names[index] = b""
+
+    def _load_index(self, index: int, name: bytes) -> None:
+        """Load saved data of driver name into participant index, or reset if new driver"""
+        self._names[index] = name
+        saved = self._departed.pop(name, None) if name else None
+        if saved is None:
+            self._reset_index(index)
+            return
+        (
+            self._laps[index],
+            self._pit_mode[index],
+            self._invalidated[index],
+            self.grid[index],
+            self.lap_start[index],
+            self.last_valid[index],
+            self.pitstops[index],
+        ) = saved
+
+    def _sync_names(self, participants, total: int) -> None:
+        """Move data with driver names if participant indexes changed"""
+        changed = [
+            index for index in range(total)
+            if self._names[index] != participants[index].mName
+        ]
+        if not changed and total >= self._total:
+            self._total = total
+            return
+        # Save all changed (and no longer used) indexes first, then load,
+        # so that drivers swapping indexes keep their data
+        for index in changed:
+            self._save_index(index)
+        for index in range(total, self._total):
+            self._save_index(index)
+            self._reset_index(index)
+        for index in changed:
+            self._load_index(index, participants[index].mName)
+        self._total = total
 
     def update(self, data: AMS2SharedMemory, elapsed_time: float) -> None:
         """Update participant data"""
@@ -184,6 +253,7 @@ class ParticipantTracker:
         participants = data.mParticipantInfo
         pit_modes = data.mPitModes
         invalidated = data.mLapsInvalidated
+        self._sync_names(participants, total)
         # Record grid position before race starts
         pre_race = data.mSessionState == SessionState.FORMATION_LAP or (
             data.mSessionState == SessionState.RACE
@@ -205,6 +275,45 @@ class ParticipantTracker:
             if pit_mode == PitMode.IN_PIT and self._pit_mode[index] != PitMode.IN_PIT:
                 self.pitstops[index] += 1
             self._pit_mode[index] = pit_mode
+
+
+class SessionCheck:
+    """Check session or player vehicle resets
+
+    AMS2 has no reset counter, a reset is detected from session state changes,
+    session restarts, and player completed laps going back.
+    """
+
+    __slots__ = (
+        "_session_state",
+        "_player_index",
+        "_completed_laps",
+    )
+
+    def __init__(self) -> None:
+        self._session_state = -1
+        self._player_index = INVALID_INDEX
+        self._completed_laps = 0
+
+    def is_reset(self, data: AMS2SharedMemory, player_index: int) -> bool:
+        """Is session or player vehicle reset since last check
+
+        Completed laps are only compared for the same player index,
+        so that viewing another vehicle (with fewer laps) is not a reset.
+        """
+        completed_laps = data.mParticipantInfo[max(player_index, 0)].mLapsCompleted
+        is_reset = (
+            self._session_state != data.mSessionState  # session changed
+            or data.mGameState == GameState.INGAME_RESTARTING  # session restarted
+            or (  # lap count reset
+                self._player_index == player_index
+                and self._completed_laps > completed_laps
+            )
+        )
+        self._session_state = data.mSessionState
+        self._player_index = player_index
+        self._completed_laps = completed_laps
+        return is_reset
 
 
 class SyncData:
@@ -296,8 +405,7 @@ class SyncData:
         data_freezed = True  # whether data is freezed
         update_delay = 0.5  # longer delay while inactive
 
-        last_session_state = -1
-        last_completed_laps = 0
+        session_check = SessionCheck()
         last_mono_time = monotonic()
         reset_hold_time = 0.0  # hold paused state after reset
 
@@ -350,12 +458,7 @@ class SyncData:
                 self.synced = False
 
             # Check session or vehicle resets
-            completed_laps = data.mParticipantInfo[max(self.player_index, 0)].mLapsCompleted
-            if (
-                last_session_state != data.mSessionState  # session changed
-                or data.mGameState == GameState.INGAME_RESTARTING  # session restarted
-                or last_completed_laps > completed_laps  # lap count reset
-            ):
+            if session_check.is_reset(data, self.player_index):
                 self.elapsed_time = 0.0
                 self.resets += 1
                 self.tracker.reset()
@@ -367,8 +470,6 @@ class SyncData:
             elif reset_hold_time and mono_time >= reset_hold_time:
                 reset_hold_time = 0.0
                 self.paused = False
-            last_session_state = data.mSessionState
-            last_completed_laps = completed_laps
 
             # Session elapsed time, only ticking while game not paused
             if data.mGameState != GameState.INGAME_PAUSED:

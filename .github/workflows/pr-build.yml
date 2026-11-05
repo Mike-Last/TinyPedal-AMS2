@@ -24,7 +24,7 @@ jobs:
         run: python -m pip install --quiet PySide2==5.15.2.1 psutil==6.1.1 py2exe==0.14.2.0 pytest
 
       - name: Test
-        run: python -m pytest tests/test_ams2_connector.py -q -p no:cacheprovider
+        run: python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py -q -p no:cacheprovider
 
       - name: Build
         run: python freeze_py2exe.py -c

@@ -31,7 +31,7 @@ See the README and `docs/customization.md` for what the AMS2 API supports and wh
 ## Releases
 
 `.github/workflows/upstream-sync.yml` checks upstream every 6 hours. When upstream publishes a new release
-it merges the release tag into `main`, runs the AMS2 tests, builds the exe with py2exe (Python 3.10,
+it merges the release tag into `main`, runs the fork's tests, builds the exe with py2exe (Python 3.10,
 PySide2 5.15), checks that the exe starts, and publishes a release here tagged `ams2-<version>-<run>` with
 `TinyPedal-ams2-<version>.zip` attached. Merged upstream tags are marked `upstream-merged/<tag>`.
 A merge conflict or a failed build opens an issue and leaves `main` untouched. A manual run of the workflow
@@ -54,3 +54,16 @@ git submodule update --init
 ```
 
 The build lands in `dist\TinyPedal` and `-c` wipes that folder first, so do not run TinyPedal from it.
+
+## Tests
+
+```
+uv pip install --python .venv pytest
+.venv/Scripts/python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py
+```
+
+`test_ams2_connector.py` covers the AMS2 data structure, unit conversions, session reset detection, and the
+pit stop, grid and lap validity tracking that TinyPedal does itself. With AMS2 installed in the default Steam
+folder it also checks every field against the game's own `Support/SharedMemory/.../SharedMemory.h` (set
+`AMS2_SHARED_MEMORY_H` to use another path), otherwise that test is skipped. `test_watchlist.py` covers the
+Watchlist name matching and row selection.
