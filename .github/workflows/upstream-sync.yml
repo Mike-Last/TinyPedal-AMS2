@@ -97,6 +97,23 @@ jobs:
           # PySide2 5.15 (the version upstream builds with) has no wheels past Python 3.10
           python-version: '3.10'
 
+      # stop before anything is built, pushed or released if the upstream release changes
+      # licence terms (licence files, README License section, source headers, submodule licences)
+      - name: Check upstream licence terms
+        id: licence
+        if: steps.merge.outcome == 'success'
+        shell: pwsh
+        run: |
+          $report = (python .github/scripts/check_upstream_licence.py HEAD^1 HEAD) -join "`n"
+          $failed = $LASTEXITCODE -ne 0
+          Write-Host $report
+          $delimiter = "EOF_$([guid]::NewGuid().ToString('N'))"
+          "report<<$delimiter`n$report`n$delimiter" | Out-File $env:GITHUB_OUTPUT -Append
+          if ($failed) {
+            Write-Host "::error::Upstream release ${{ steps.upstream.outputs.tag }} changes licence terms, review before merging"
+            exit 1
+          }
+
       - name: Install build dependencies
         if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
         shell: pwsh
@@ -187,17 +204,24 @@ jobs:
           }
           gh release create $tag $zip --title $title --notes $notes --latest
 
-      - name: Open an issue when the merge or build failed
-        if: failure() && (steps.merge.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure')
+      - name: Open an issue when the merge, licence check or build failed
+        if: failure() && (steps.merge.outcome == 'failure' || steps.licence.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          # upstream content (file names, licence text) goes through env, never into the script itself
+          MERGE_CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          LICENCE_REPORT: ${{ steps.licence.outputs.report }}
         run: |
           $tag = "${{ steps.upstream.outputs.tag }}"
           $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          $fence = '```'
           if ("${{ steps.merge.outcome }}" -eq "failure") {
             $title = "Upstream release $tag does not merge cleanly"
-            $body = "Merging upstream release $tag into main hit conflicts in:`n`n``````n${{ steps.merge.outputs.conflicts }}`n``````n`nMain was left untouched. Merge it by hand (git fetch upstream; git merge $tag), resolve, push, then tag the merge with upstream-merged/$tag so the workflow stops retrying.`n`nRun: $runUrl"
+            $body = "Merging upstream release $tag into main hit conflicts in:`n`n$fence`n$env:MERGE_CONFLICTS`n$fence`n`nMain was left untouched. Merge it by hand (git fetch upstream; git merge $tag), resolve, push, then tag the merge with upstream-merged/$tag so the workflow stops retrying.`n`nRun: $runUrl"
+          } elseif ("${{ steps.licence.outcome }}" -eq "failure") {
+            $title = "Upstream release $tag changes licence terms"
+            $body = "Upstream release $tag changes licence related files, so it was not merged, built or released. Main was left untouched.`n`n$env:LICENCE_REPORT`n`nReview the changes (are the new terms still GPLv3 compatible, and do the notices in the release zip still cover everything bundled?). To accept them, merge by hand (git fetch upstream; git merge $tag), push, then tag the merge with upstream-merged/$tag so the workflow stops retrying.`n`nRun: $runUrl"
           } else {
             $title = "Build failed" + $(if ($tag) { " after merging upstream release $tag" } else { " on main" })
             $body = "The tests or the build failed. Main was left untouched.`n`nRun: $runUrl"

@@ -37,6 +37,14 @@ PySide2 5.15), checks that the exe starts, and publishes a release here tagged `
 A merge conflict or a failed build opens an issue and leaves `main` untouched. A manual run of the workflow
 builds `main` and publishes a release.
 
+Before building, `.github/scripts/check_upstream_licence.py` checks whether the upstream release changes
+licence terms: `LICENSE.txt`, `images/CC-BY-SA-4.0.txt`, `docs/licenses/`, the README `License` section
+(ignoring copyright years), licence lines in Python file headers, and licence files of moved `thirdparty`
+submodules. It only looks at what upstream changed, not at the fork's own edits. If anything changed, the
+release is not merged, built or released, and an issue shows the changes. Upstream adds a library licence
+a few times a year, which also stops the sync for review. To accept a release after reviewing it, merge it
+by hand, push, and tag the merge `upstream-merged/<tag>`.
+
 ## Install
 
 SimRig Manager installs and updates it (`tinypedalFork` block, `Update-TinyPedalFork.ps1` pre-launch) into
