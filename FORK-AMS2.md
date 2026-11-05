@@ -1,6 +1,22 @@
-# TinyPedal fork: Automobilista 2
+# Unofficial TinyPedal fork: Automobilista 2
 
-This is a private fork of [TinyPedal/TinyPedal](https://github.com/TinyPedal/TinyPedal) that adds:
+**This is an unofficial, personal fork** of [TinyPedal/TinyPedal](https://github.com/TinyPedal/TinyPedal).
+It is not made, endorsed or supported by the TinyPedal developers, so please do not take problems with it to them.
+
+I made it to get Automobilista 2 support and a few features I want on my own rig. The fork's
+changes were **written with AI (Claude, by Anthropic)** at my direction, and tested by me on my own
+setup only. It is shared as-is, in case it is useful to someone else.
+
+## License
+
+TinyPedal is licensed under the GNU GPL version 3 or later, and so is this fork: see [LICENSE.txt](./LICENSE.txt).
+The TinyPedal icon and the files in `images` stay under CC BY-SA 4.0, and third-party notices are in
+`docs/licenses`. As GPLv3 section 5 asks, this file records what the fork modified; the changes date from 2026
+and every change is in this repository's git history, on top of the upstream release tags it merges.
+
+## What the fork changes
+
+The fork adds:
 
 - **Automobilista 2 API** (`tinypedal/adapter/ams2_*.py`): reads AMS2's built-in shared memory. In game,
   set `Options -> System -> Shared Memory` to `Project CARS 2`, then pick `API -> Automobilista 2`.

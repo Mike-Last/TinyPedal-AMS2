@@ -40,3 +40,6 @@
 * Alpha testers (Rnzi, chips, derricklu30, DKxiaoming, fatboy, fartman, felixfight, Sendoh, y1Thunder, zxd1997)
 * Tony Whitley (Seven Smiles) - for pyRfactor2SharedMemory library
 * Vytautas Leonavičius (The Iron Wolf) - for rF2 Shared Memory Map Plugin
+
+## Unofficial fork (Mike-Last/TinyPedal-AMS2)
+* Mike Last (Mike-Last) - Automobilista 2 API, Watchlist widget, fork build & release workflow (written with AI assistance; not part of official TinyPedal)

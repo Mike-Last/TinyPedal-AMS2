@@ -1,3 +1,14 @@
+> [!WARNING]
+> **This is an UNOFFICIAL fork of TinyPedal. It is not made, endorsed or supported by the TinyPedal developers.**
+>
+> I built this fork for my own rig: it adds **Automobilista 2** support and a few features I want (such as the Watchlist widget). The fork's code was **written with AI (Claude)** at my direction, and is tested only on my own setup. Expect rough edges.
+>
+> - **Do not report problems with this fork to the TinyPedal project.** Open an issue here instead.
+> - Fork downloads: [Mike-Last/TinyPedal-AMS2 releases](https://github.com/Mike-Last/TinyPedal-AMS2/releases). For official TinyPedal, use [TinyPedal/TinyPedal](https://github.com/TinyPedal/TinyPedal).
+> - What the fork changes, and how it is built: [FORK-AMS2.md](./FORK-AMS2.md).
+>
+> The rest of this README is TinyPedal's own, with setup notes for Automobilista 2.
+
 # TinyPedal - racing simulation overlay
 
 TinyPedal is a Free and Open Source telemetry overlay application for racing simulation.
@@ -6,7 +17,7 @@ Focuses on minimalist design, light-weight and efficiency, extensive customizati
 
 Currently supports `Assetto Corsa Competizione`, `Automobilista 2`, `Le Mans Ultimate`, `rFactor 2`, and runs on `Windows` and `Linux`.
 
-[Download](https://github.com/TinyPedal/TinyPedal/releases) -
+[Download (this fork)](https://github.com/Mike-Last/TinyPedal-AMS2/releases) -
 [Quick Start](#quick-start) -
 [FAQ](https://github.com/TinyPedal/TinyPedal/wiki/Frequently-Asked-Questions) -
 [User Guide](https://github.com/TinyPedal/TinyPedal/wiki/User-Guide) -
@@ -127,7 +138,7 @@ Note, if game cannot generate `rFactor2SharedMemoryMapPlugin64.dll` entry in `Cu
 >
 > For Linux user, please follow [Running on Linux](#running-on-linux) section for instruction.
 
-1. Download latest TinyPedal version from [Releases](https://github.com/TinyPedal/TinyPedal/releases) page, extract it into a clean folder, and run `tinypedal.exe`.
+1. Download the latest release of this fork from its [Releases](https://github.com/Mike-Last/TinyPedal-AMS2/releases) page, extract it into a clean folder, and run `tinypedal.exe`.
 
 2. A tray icon will appear at system tray. If not shown, check hidden tray icon. `Right Click` on tray icon will bring up context menu.
 
@@ -159,9 +170,9 @@ Note, if game cannot generate `rFactor2SharedMemoryMapPlugin64.dll` entry in `Cu
 > [!NOTE]
 > It is not recommended to download source code via `Code` button at the top of repository, as it doesn't contain required submodule files, and not convenient to update or sync source code.
 
-Use [Git](https://git-scm.com/) tool and run following command to clone TinyPedal source code alongside required submodules:
+Use [Git](https://git-scm.com/) tool and run following command to clone this fork's source code alongside required submodules:
 ```sh
-git clone --recursive https://github.com/TinyPedal/TinyPedal.git
+git clone --recursive https://github.com/Mike-Last/TinyPedal-AMS2.git
 ```
 
 To update submodules, run command:

@@ -7,6 +7,10 @@ TinyPedal relies on following third-party software:
 - Qt for Python, the GNU LGPL version 3.
   website: https://www.qt.io/qt-for-python
   license: https://www.qt.io/licensing/
+  The release builds bundle unmodified Qt 5.15.2 and PySide2 5.15.2.1 (with Shiboken2) as separate
+  libraries in the "lib" folder, which can be replaced with other compatible builds. Their source code:
+  Qt 5.15.2: https://download.qt.io/archive/qt/5.15/5.15.2/single/qt-everywhere-src-5.15.2.tar.xz
+  PySide2 5.15.2.1: https://download.qt.io/official_releases/QtForPython/pyside2/PySide2-5.15.2.1-src/pyside-setup-opensource-src-5.15.2.1.zip
 
 - psutil, the BSD 3-Clause License.
   website: https://github.com/giampaolo/psutil
@@ -27,5 +31,12 @@ TinyPedal relies on following third-party software:
 - pyACCSharedMemory, the MIT license.
   website: https://github.com/TinyPedal/pyACCSharedMemory
   license: https://github.com/TinyPedal/pyACCSharedMemory/blob/master/License.txt
+
+The unofficial Automobilista 2 fork (Mike-Last/TinyPedal-AMS2) also uses the following game
+interface. No code from it is included: its shared memory data layout is re-implemented in Python.
+
+- Automobilista 2 shared memory interface ("SharedMemory.h", SHARED_MEMORY_VERSION 14),
+  by Reiza Studios, based on the Project CARS 2 interface by Slightly Mad Studios.
+  website: https://www.game-automobilista2.com/
 
 For licenses and notices of each software, see LICENSE file in "docs\licenses" folder, or visit website.

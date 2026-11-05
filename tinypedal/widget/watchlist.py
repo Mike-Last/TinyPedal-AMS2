@@ -1,5 +1,6 @@
 #  TinyPedal is an open-source overlay application for racing simulation.
 #  Copyright (C) 2022-2026 TinyPedal developers, see contributors.md file
+#  Copyright (C) 2026 Mike Last - unofficial AMS2 fork additions, written with AI assistance
 #
 #  This file is part of TinyPedal.
 #
