@@ -194,13 +194,14 @@ jobs:
           $upstreamUrl = "${{ steps.upstream.outputs.url }}"
           # upstream keeps one version string across dev builds, so the run number keeps tags unique
           $tag = "ams2-$version-${{ github.run_number }}"
+          $warning = "**Unofficial fork build.** Not made, endorsed or supported by the TinyPedal developers, and the fork's code was written with AI. Report problems with it [here](https://github.com/${{ github.repository }}/issues), not to TinyPedal. For official TinyPedal, see [TinyPedal/TinyPedal](https://github.com/TinyPedal/TinyPedal/releases)."
           $how = "Unzip into its own folder (or let SimRig Manager install it) and run tinypedal.exe. Keep user data outside the install folder, see FORK-AMS2.md."
           if ($upstreamTag) {
-            $title = "TinyPedal $version + AMS2 (upstream $upstreamTag)"
-            $notes = "Fork build of TinyPedal with the Automobilista 2 API and the Watchlist widget, on top of upstream release [$upstreamTag]($upstreamUrl).`n`n$how"
+            $title = "Unofficial TinyPedal $version + AMS2 (upstream $upstreamTag)"
+            $notes = "$warning`n`nAdds the Automobilista 2 API and the Watchlist widget, on top of upstream release [$upstreamTag]($upstreamUrl).`n`n$how"
           } else {
-            $title = "TinyPedal $version + AMS2"
-            $notes = "Fork build of TinyPedal with the Automobilista 2 API and the Watchlist widget, from the current main branch.`n`n$how"
+            $title = "Unofficial TinyPedal $version + AMS2"
+            $notes = "$warning`n`nAdds the Automobilista 2 API and the Watchlist widget, built from the current main branch.`n`n$how"
           }
           gh release create $tag $zip --title $title --notes $notes --latest
 
