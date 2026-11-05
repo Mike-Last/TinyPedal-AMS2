@@ -137,6 +137,30 @@ def test_session_check():
     assert check.is_reset(data, 0)
 
 
+def test_session_check_main_menu():
+    """Returning from the main menu is a new session, a replay during the session is not"""
+    data = AMS2SharedMemory()
+    data.mGameState = GameState.INGAME_PLAYING
+    data.mSessionState = SessionState.PRACTICE
+    check = SessionCheck()
+    check.check_game_state(data.mGameState)
+    assert check.is_reset(data, 0)  # first check
+    # Instant replay or pause during the session
+    for state in (GameState.INGAME_REPLAY, GameState.INGAME_PAUSED, GameState.INGAME_PLAYING):
+        check.check_game_state(state)
+    assert not check.is_reset(data, 0)
+    # Main menu, then same session type with the same (zero) lap count
+    for state in (GameState.FRONT_END, GameState.INGAME_PLAYING):
+        check.check_game_state(state)
+    assert check.is_reset(data, 0)
+    assert not check.is_reset(data, 0)  # only once
+    # Replay watched from the main menu, or game closed and started again
+    for left_state in (GameState.FRONT_END_REPLAY, GameState.EXITED):
+        check.check_game_state(left_state)
+        check.check_game_state(GameState.INGAME_PLAYING)
+        assert check.is_reset(data, 0)
+
+
 def test_participant_tracker():
     """Grid position, lap start time, last lap valid state & pit stops"""
     data = AMS2SharedMemory()

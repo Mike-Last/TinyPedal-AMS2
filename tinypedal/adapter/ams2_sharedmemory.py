@@ -54,6 +54,12 @@ GAME_STATE_RUNNING = frozenset((
     GameState.INGAME_PAUSED,
     GameState.INGAME_INMENU_TIME_TICKING,
 ))
+# Game states where the session has ended (main menu, menu replay, game closed)
+GAME_STATE_LEFT_SESSION = frozenset((
+    GameState.EXITED,
+    GameState.FRONT_END,
+    GameState.FRONT_END_REPLAY,
+))
 # Body parts of damage severity, direction in vehicle frame (+x right, +y behind)
 _DIAGONAL = 0.7071067811865476
 BODY_PART_DIRECTIONS = (
@@ -466,19 +472,31 @@ class SessionCheck:
     """Check session or player vehicle resets
 
     AMS2 has no reset counter, a reset is detected from session state changes,
-    session restarts, and player completed laps going back.
+    session restarts, player completed laps going back, and returning from the main menu.
     """
 
     __slots__ = (
         "_session_state",
         "_player_index",
         "_completed_laps",
+        "_left_session",
     )
 
     def __init__(self) -> None:
         self._session_state = -1
         self._player_index = INVALID_INDEX
         self._completed_laps = 0
+        self._left_session = False
+
+    def check_game_state(self, game_state: int) -> None:
+        """Check game state on every sample, including while data is paused
+
+        Data is not read while the game is in menus, so session changes there are not seen.
+        Leaving to the main menu ends the session, the next session is a reset,
+        even with the same session type and lap count. Replays during a session do not count.
+        """
+        if game_state in GAME_STATE_LEFT_SESSION:
+            self._left_session = True
 
     def is_reset(self, data: AMS2SharedMemory, player_index: int) -> bool:
         """Is session or player vehicle reset since last check
@@ -488,7 +506,8 @@ class SessionCheck:
         """
         completed_laps = data.mParticipantInfo[max(player_index, 0)].mLapsCompleted
         is_reset = (
-            self._session_state != data.mSessionState  # session changed
+            self._left_session  # returned from main menu
+            or self._session_state != data.mSessionState  # session changed
             or data.mGameState == GameState.INGAME_RESTARTING  # session restarted
             or (  # lap count reset
                 self._player_index == player_index
@@ -498,6 +517,7 @@ class SessionCheck:
         self._session_state = data.mSessionState
         self._player_index = player_index
         self._completed_laps = completed_laps
+        self._left_session = False
         return is_reset
 
 
@@ -603,6 +623,7 @@ class SyncData:
         while not _event_wait(update_delay):
             self.dataset.update()
             data = self.player_data
+            session_check.check_game_state(data.mGameState)
             mono_time = monotonic()
             delta_time = min(mono_time - last_mono_time, 0.1)
             last_mono_time = mono_time
