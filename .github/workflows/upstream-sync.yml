@@ -126,7 +126,7 @@ jobs:
         if: github.event_name != 'schedule' || steps.upstream.outputs.new == 'true'
         shell: pwsh
         run: |
-          python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py -q -p no:cacheprovider
+          python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py tests/test_widget_auto_hide.py -q -p no:cacheprovider
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Build

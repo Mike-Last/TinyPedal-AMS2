@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from PySide2.QtCore import QBasicTimer, Qt, Slot
+from PySide2.QtCore import QBasicTimer, QEvent, Qt, Slot
 from PySide2.QtGui import QFont, QFontMetrics, QPalette, QPixmap
 from PySide2.QtWidgets import QGridLayout, QLayout, QMenu, QWidget
 
@@ -57,6 +57,10 @@ class Base(QWidget):
         # Base setting
         self.setWindowTitle(f"{APP.TINYPEDAL} - {widget_name.capitalize()}")
         self.move(self.wcfg["position_x"], self.wcfg["position_y"])
+
+        # Fork: blank (transparent) state while auto hidden
+        self._blanked = False
+        self._blank_state = None
 
         # Set update timer
         self._update_timer = QBasicTimer()
@@ -137,14 +141,54 @@ class Base(QWidget):
         """Toggle widget lock state"""
         self.setWindowFlag(Qt.WindowTransparentForInput, locked)
         # Need re-check after lock/unlock
-        self.setHidden(self.cfg.overlay["auto_hide"] and not realtime_state.active)
+        self.__set_hidden(self.cfg.overlay["auto_hide"] and not realtime_state.active)
 
     @Slot(bool)  # type: ignore[operator]
     def __toggle_vr_compat(self, enabled: bool):
         """Toggle widget VR compatibility"""
         self.setWindowFlag(Qt.Tool, not enabled)
         # Need re-check
-        self.setHidden(self.cfg.overlay["auto_hide"] and not realtime_state.active)
+        self.__set_hidden(self.cfg.overlay["auto_hide"] and not realtime_state.active)
+
+    @Slot(bool)  # type: ignore[operator]
+    def __set_hidden(self, hidden: bool):
+        """Fork: auto hide by drawing nothing instead of hiding the window
+
+        Window capture tools (OpenKneeboard, VR overlays) keep showing the last
+        frame of a hidden window, a transparent window is captured as empty.
+        Without translucent background the window is hidden as before.
+        """
+        if not self.cfg.compatibility["enable_translucent_background"]:
+            self.setHidden(hidden)
+            return
+        if self._blanked != hidden:
+            self._blanked = hidden
+            if hidden:
+                # Keep window size, hide contents (styled backgrounds draw outside paint events)
+                self._blank_state = (self.minimumSize(), self.maximumSize(), [
+                    child for child in self.children()
+                    if isinstance(child, QWidget) and not child.isHidden()
+                ])
+                self.setFixedSize(self.size())
+                for child in self._blank_state[2]:
+                    child.hide()
+                self.installEventFilter(self)
+            else:
+                self.removeEventFilter(self)
+                min_size, max_size, children = self._blank_state
+                for child in children:
+                    child.show()
+                self.setMinimumSize(min_size)
+                self.setMaximumSize(max_size)
+                self._blank_state = None
+        self.setHidden(False)
+        self.update()
+
+    def eventFilter(self, watched, event):
+        """Fork: skip own painting while blanked, translucent backing store stays clear"""
+        if self._blanked and event.type() == QEvent.Paint:
+            return True
+        return super().eventFilter(watched, event)
 
     @Slot(bool)  # type: ignore[operator]
     def __toggle_timer(self, paused: bool):
@@ -158,14 +202,14 @@ class Base(QWidget):
     def __connect_signal(self):
         """Connect overlay lock and hide signal"""
         overlay_signal.locked.connect(self.__toggle_lock)
-        overlay_signal.hidden.connect(self.setHidden)
+        overlay_signal.hidden.connect(self.__set_hidden)
         overlay_signal.paused.connect(self.__toggle_timer)
         overlay_signal.iconify.connect(self.__toggle_vr_compat)
 
     def __break_signal(self):
         """Disconnect overlay lock and hide signal"""
         overlay_signal.locked.disconnect(self.__toggle_lock)
-        overlay_signal.hidden.disconnect(self.setHidden)
+        overlay_signal.hidden.disconnect(self.__set_hidden)
         overlay_signal.paused.disconnect(self.__toggle_timer)
         overlay_signal.iconify.disconnect(self.__toggle_vr_compat)
 

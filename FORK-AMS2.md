@@ -24,6 +24,10 @@ The fork adds:
   named in its `watched_driver_names` option (friends or other notable drivers) plus the player, with every
   Relative option. It subclasses the Relative widget through a small `relative_list()` hook in `relative.py`,
   and its defaults are copied from Relative's, so new upstream Relative options carry over.
+- **Auto hide for window capture** (`tinypedal/widget/_base.py`): auto hide (and the overlay visibility
+  hotkey) leaves widget windows shown but draws nothing, instead of hiding them. OpenKneeboard and other
+  window capture tools keep showing the last frame of a hidden window. With translucent background
+  turned off, widgets are hidden as before.
 - **Build fix**: `Qt5Qml.dll` is bundled by `freeze_py2exe.py`, without it the py2exe build fails at startup.
 
 See the README and `docs/customization.md` for what the AMS2 API supports and what the game does not provide.
@@ -67,7 +71,7 @@ The build lands in `dist\TinyPedal` and `-c` wipes that folder first, so do not 
 
 ```
 uv pip install --python .venv pytest
-.venv/Scripts/python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py
+.venv/Scripts/python -m pytest tests/test_ams2_connector.py tests/test_watchlist.py tests/test_widget_auto_hide.py
 ```
 
 `test_ams2_connector.py` covers the AMS2 data structure, unit conversions, session reset detection, and the
@@ -75,4 +79,4 @@ pit stop, grid and lap validity tracking that TinyPedal does itself, and the imp
 location it estimates. With AMS2 installed in the default Steam
 folder it also checks every field against the game's own `Support/SharedMemory/.../SharedMemory.h` (set
 `AMS2_SHARED_MEMORY_H` to use another path), otherwise that test is skipped. `test_watchlist.py` covers the
-Watchlist name matching and row selection.
+Watchlist name matching and row selection. `test_widget_auto_hide.py` covers the blanked auto hide.
