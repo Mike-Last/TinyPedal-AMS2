@@ -95,6 +95,10 @@ class Realtime(DataModule):
                             output.finishTimeOffset = 0.0
                             output.finishAsLap = True
                             output.finishLapOffset = 0.0
+                        elif not in_race:
+                            # Fork: keep refreshing outside races, so position change is not
+                            # compared to the order at the start of practice or qualifying
+                            update_qualify_position(output)
 
                         last_veh_total = veh_total
                         last_session_elapsed = session_elapsed

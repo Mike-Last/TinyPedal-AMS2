@@ -443,6 +443,16 @@ def test_reader_values():
     assert vehicle.impact_time() == 20.0
     assert vehicle.impact_position(1) == (0.0, 0.0)  # player only
 
+    # Finished state only counts in race, AMS2 also reports it in qualifying
+    data.mRaceStates[1] = RaceState.FINISHED
+    data.mSessionState = SessionState.QUALIFY
+    assert vehicle.finish_state(1) == 0
+    data.mSessionState = SessionState.RACE
+    assert vehicle.finish_state(1) == 1
+    data.mRaceStates[1] = RaceState.DNF
+    data.mSessionState = SessionState.QUALIFY
+    assert vehicle.finish_state(1) == 2
+
     # Snow counts as precipitation
     session = ams2_reader.Session(info)
     data.mRainDensity = 0.2

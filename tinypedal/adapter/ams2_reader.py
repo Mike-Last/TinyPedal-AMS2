@@ -972,7 +972,11 @@ class Vehicle(_reader.Vehicle, DataAdapter):
         """Finish state, 0 = none, 1 = finished, 2 = DNF, 3 = DQ"""
         state = self.shmm.ams2Data.mRaceStates[self.index_of(index)]
         if state == RaceState.FINISHED:
-            return 1
+            # AMS2 also reports finished for cars in practice & qualifying,
+            # only a race has a finish
+            if self.shmm.ams2Data.mSessionState in (SessionState.RACE, SessionState.FORMATION_LAP):
+                return 1
+            return 0
         if state in (RaceState.DNF, RaceState.RETIRED):
             return 2
         if state == RaceState.DISQUALIFIED:
