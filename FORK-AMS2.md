@@ -23,8 +23,8 @@ The fork adds:
 - **Watchlist widget** (`tinypedal/widget/watchlist.py`): a Relative widget that only shows the drivers
   named in its `watched_driver_names` option (friends or other notable drivers) plus the player (`show_player`),
   with every Relative option. It has one row per watched name plus the player, filled in track order with
-  empty rows last, so `additional_players_front/behind` do not apply. It subclasses the Relative widget through a small `row_count()` and `relative_list()` hooks in `relative.py`,
-  and its defaults are copied from Relative's, so new upstream Relative options carry over.
+  empty rows last, so `additional_players_front/behind` do not apply. It subclasses the Relative widget
+  through small `row_count()` and `relative_list()` hooks in `relative.py`, and its defaults are copied from Relative's, so new upstream Relative options carry over.
 - **Auto hide for window capture** (`tinypedal/widget/_base.py`): auto hide (and the overlay visibility
   hotkey) leaves widget windows shown but draws nothing, instead of hiding them. OpenKneeboard and other
   window capture tools keep showing the last frame of a hidden window. With translucent background
