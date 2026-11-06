@@ -44,7 +44,15 @@ class Realtime(relative.Realtime):
         self.show_player = True
         super().__init__(config, widget_name)
         self.partial_match = self.wcfg["enable_partial_name_match"]
+        self.auto_hide = self.wcfg["enable_auto_hide_without_watched_driver"]
         self.match_cache: dict[str, bool] = {}
+        self.watched_present = False
+
+    def timerEvent(self, event):
+        """Update rows, hide while no watched driver is in the session"""
+        super().timerEvent(event)
+        if self.auto_hide:
+            self.set_widget_hidden(not self.watched_present)
 
     def row_count(self, rows: int) -> int:
         """One row per watched driver name, plus the player"""
@@ -64,6 +72,7 @@ class Realtime(relative.Realtime):
             for time_gap, index in minfo.relative.relativeBehind
             if index >= 0 and self.is_watched(dataset[index].driverName)
         }
+        self.watched_present = bool(gap_behind)
         watched = [
             (time_gap, index) if time_gap <= gap_behind[index] else (-gap_behind[index], index)
             for time_gap, index in minfo.relative.relativeAhead

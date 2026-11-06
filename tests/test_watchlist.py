@@ -46,7 +46,9 @@ def rows(names: str, partial: bool = False, show_player: bool = True) -> list:
     )
     widget.veh_range = watchlist.Realtime.row_count(widget, 7)
     widget.is_watched = lambda name: watchlist.Realtime.is_watched(widget, name)
-    return list(watchlist.Realtime.relative_list(widget, PLAYER))
+    result = list(watchlist.Realtime.relative_list(widget, PLAYER))
+    rows.present = widget.watched_present
+    return result
 
 
 def test_parse_driver_names():
@@ -96,3 +98,11 @@ def test_empty_relative_slots(module_info):
     module_info.relative.relativeAhead.append(NA)
     module_info.relative.relativeBehind.insert(0, NA)
     assert rows("bob") == [(10.0, 2), (0.0, PLAYER)]
+
+
+def test_watched_present():
+    """Watchlist hides itself while no watched driver is in the session"""
+    rows("nobody")
+    assert rows.present is False
+    rows("nobody, carol")
+    assert rows.present is True

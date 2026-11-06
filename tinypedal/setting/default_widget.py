@@ -4200,6 +4200,7 @@ WIDGET_DEFAULT = {
         "watched_driver_names": "",
         "enable_partial_name_match": True,
         "show_player": True,
+        "enable_auto_hide_without_watched_driver": True,
         "caption_text_title": "watchlist",
     },
     **{name: setting for name, setting in WIDGET_DEFAULT.items() if name > "watchlist"},

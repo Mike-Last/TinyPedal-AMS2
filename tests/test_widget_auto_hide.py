@@ -91,3 +91,20 @@ def test_auto_hide_without_translucency_hides_window(widget):
     signal.hidden.emit(True)
     app.processEvents()
     assert not test_widget.isVisible()
+
+
+def test_widget_hidden_with_overlay_hidden(widget):
+    """A widget's own hide state blanks it, overlay auto hide still applies on top"""
+    test_widget, signal, _, app = widget
+    test_widget.set_widget_hidden(True)
+    app.processEvents()
+    assert test_widget.isVisible() and drawn_pixels(test_widget) == 0
+
+    signal.hidden.emit(True)
+    signal.hidden.emit(False)  # overlay shown again, widget stays hidden
+    app.processEvents()
+    assert drawn_pixels(test_widget) == 0
+
+    test_widget.set_widget_hidden(False)
+    app.processEvents()
+    assert drawn_pixels(test_widget) > 0

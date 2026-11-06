@@ -61,6 +61,8 @@ class Base(QWidget):
         # Fork: blank (transparent) state while auto hidden
         self._blanked = False
         self._blank_state = None
+        self._overlay_hidden = False
+        self._widget_hidden = False
 
         # Set update timer
         self._update_timer = QBasicTimer()
@@ -152,12 +154,24 @@ class Base(QWidget):
 
     @Slot(bool)  # type: ignore[operator]
     def __set_hidden(self, hidden: bool):
-        """Fork: auto hide by drawing nothing instead of hiding the window
+        """Fork: overlay auto hide state"""
+        self._overlay_hidden = hidden
+        self.__apply_hidden()
+
+    def set_widget_hidden(self, hidden: bool):
+        """Fork: hide this widget by its own state, on top of overlay auto hide"""
+        if self._widget_hidden != hidden:
+            self._widget_hidden = hidden
+            self.__apply_hidden()
+
+    def __apply_hidden(self):
+        """Fork: hide by drawing nothing instead of hiding the window
 
         Window capture tools (OpenKneeboard, VR overlays) keep showing the last
         frame of a hidden window, a transparent window is captured as empty.
         Without translucent background the window is hidden as before.
         """
+        hidden = self._overlay_hidden or self._widget_hidden
         if not self.cfg.compatibility["enable_translucent_background"]:
             self.setHidden(hidden)
             return
