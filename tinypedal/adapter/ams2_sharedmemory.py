@@ -803,10 +803,11 @@ class AMS2Info:
         if self._state_override:
             return self._active_state
         data = self._sync.player_data
+        # Not while paused or in the in-session menu (garage, pit box), as rF2 outside realtime
         return (
             self._sync.synced
             and not self._sync.paused
-            and data.mGameState != GameState.INGAME_PAUSED
+            and data.mGameState == GameState.INGAME_PLAYING
             and data.mMaxRPM > 0
         )
 

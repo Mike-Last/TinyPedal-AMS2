@@ -161,6 +161,21 @@ def test_session_check_main_menu():
         assert check.is_reset(data, 0)
 
 
+def test_active_state():
+    """Active (widgets shown) only while driving, not paused or in the in-session menu"""
+    info = AMS2Info()
+    data = AMS2SharedMemory()
+    info._sync.player_data = data
+    info._sync.synced = True
+    info._sync.paused = False
+    data.mMaxRPM = 8000
+    data.mGameState = GameState.INGAME_PLAYING
+    assert info.isActive
+    for state in (GameState.INGAME_PAUSED, GameState.INGAME_INMENU_TIME_TICKING):
+        data.mGameState = state
+        assert not info.isActive
+
+
 def test_participant_tracker():
     """Grid position, lap start time, last lap valid state & pit stops"""
     data = AMS2SharedMemory()
