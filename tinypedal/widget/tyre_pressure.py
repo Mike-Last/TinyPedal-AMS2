@@ -24,6 +24,7 @@ from .. import api, units
 from .. import calculation as calc
 from ..constant import DATA
 from ..userfile.heatmap import select_compound_color, select_compound_symbol
+from ..validator import invalid_save_name
 from ._base import Overlay
 
 
@@ -140,8 +141,9 @@ class Realtime(Overlay):
         """Update when vehicle on track"""
         in_pits = api.read.vehicle.in_pits()
 
-        # Update compound while in pit (or switched pit state)
-        if in_pits or self.last_in_pits != in_pits:
+        # Update compound while in pit (or switched pit state),
+        # fork: or while unknown, as AMS2 may report it after the first read
+        if in_pits or self.last_in_pits != in_pits or any(map(invalid_save_name, self.last_compounds)):
             self.last_in_pits = in_pits
             compounds = api.read.tyre.compound_class()
 
