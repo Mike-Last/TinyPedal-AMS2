@@ -1,3 +1,61 @@
+2.53.0 (2026-11-06)
+-----------------------------
+* Overlay
+  - Added "Combined Mode" option in "Overlay" menu, which sets overlay combined mode for displaying widgets. This option is disabled by default.
+    While "Combined Mode" enabled, all Widgets will be combined and drawn in one single maximized window, which may improve performance and compatibility when using "OpenKneeboard" (or similar tool) for displaying overlay in "VR", and making it easier to project overlay window.
+    Generally, it is only recommended to enable this option for "VR", or there is noticeable performance gain while enabled.
+  - See User Guide "Overlay" section for details about "Combined Mode".
+
+* Hotkey Tab
+  - Added "Overlay Combined Mode" keybinding for toggling overlay combined mode.
+
+* Fuel Calculator
+  - Added "Stint laps" column under "Stint" header, which shows stint lap number for each lap entry. Column can be toggled hidden via right-click menu on column header.
+  - Added "Final stint laps" reading, which shows number of laps to complete on the final stint.
+  - Show line separator between each new stint (grey color) or session (red color) lap data for improved readability.
+  - Added separate tabs for "Fuel usage" and "Wear rate" calculations.
+  - Added "Brake wear" calculation under "Wear rate".
+  - Added "Pad F" (front) and "Pad R" (rear) brake wear columns, each shows the highest pad (millimeters) wear of front or rear brakes per lap.
+  - Separated "Tyre" column into "Tyre F" (front) and "Tyre R" (rear) tyre wear columns, each shows the highest tread (percentage) wear of front or rear tyres per lap.
+
+* Stint Module
+  - Added stint lap number and brake wear logging to Consumption History data.
+  - Increased maximum Consumption History data logging from "100" to "300" most recent laps per vehicle class.
+
+* Wheels Module
+  - Added "minimum_brake_failure_detection_time" option, which sets minimum detection time (seconds) for detecting brake failure while under braking. Default is "3" seconds. Minimum detection time is limited to "1" second.
+  - Improved brake failure detection and logging methods.
+
+* Pace notes playback
+  - Added "Enable Playback While Spectating" check box, which allows to enable or disable pace notes playback while "Spectate" mode enabled. This option is disabled by default.
+
+* Brake wear
+  - "show_thickness" option now shows remaining brake thickness separately from "show_remaining" option.
+
+* Damage Widget
+  - Added "global_scale" option (requested by user "cnc3937-eng"), which allows to scale display size without adjusting size of individual parts. Default scale is "1.0". Minimum scale is limited to "0.1".
+
+* Flag Widget
+  - Added "show_speeding_in_pit" option (requested by user "KyanH06"), which shows warning indication when speeding in pit lane. First value shows maximum speed exceeded above pit lane speed limit. Second value shows total speeding time in seconds.
+  - Added "pit_lane_speed_limit" option, which sets pit lane speed limit (in KPH) for detecting speeding. Default value is "60" KPH.
+    Note, since game API does not provide speed limit info, this option must be set manually to detect speeding correctly. Different games or tracks may have different speed limit.
+  - Added "speeding_highlight_duration" option, which sets highlight duration for displaying speeding indication after exiting pit.
+
+* Lap time history Widget
+  - Added "show_stint_laps" option (requested by user "lucamilan87"), which shows stint lap number.
+  - Added "laps_width", "stint_laps_width" options, which set max display width for lap number.
+  - Added "show_highest_wear" option (requested by user "lucamilan87"), which shows highest tread wear of all tyres instead of average wear. This option is disabled by default.
+
+* [New]Class fields Widget
+  - Show number of active, inactive, and total vehicles for each vehicle class in a session (implemented by @Bykow).
+    Note, each field shows class name, followed by number of active vehicles (on track or in pit lane) and total vehicles in class, for example "GT3 12/18". Field background color follows class color from "Vehicle Class Editor". Fields are sorted by class leader's overall position. Vehicles that are in garage, DNF or DQ are not counted as active.
+
+* RF2 API
+  - Added "memory_map_prefix" option, which sets memory map file name prefix for accessing RF2 API via alternative plugin version. Make sure to leave this option as blank if you are using the original "rFactor2SharedMemoryMapPlugin64.dll" Plugin.
+    This option is provided for compatibility purpose, which may be used with alternative RF2 SharedMemory Plugin, such as [RF2.3.8.SharedMemoryMapPlugin.dll](https://github.com/TonyWhitley/rF2SharedMemoryMapPlugin/releases) that used by CrewChief.
+    Note, to use with "RF2.3.8.SharedMemoryMapPlugin.dll", set prefix value to "rF2.3.8.". Remember to update prefix value (with matching version value) if a new version of the plugin DLL file installed in game.
+  - Fixed an issue that caused RF2 API not working on Linux.
+
 2.52.0 (2026-10-23)
 -----------------------------
 * Relative, Rivals, Standings Widget

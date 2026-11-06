@@ -153,6 +153,7 @@ def set_style_window(base_font_pt: int) -> str:
 
     palette.setCurrentColorGroup(QPalette.Disabled)
     color_disabled_window_text = palette.windowText().color().name()
+    color_disabled_window = palette.window().color().name()
     color_disabled_highlighted_text = palette.highlightedText().color().name()
     color_disabled_highlight = palette.highlight().color().name()
 
@@ -407,6 +408,13 @@ def set_style_window(base_font_pt: int) -> str:
             color: {color_inactive_highlighted_text};
             background: {color_inactive_highlight};
             font-weight:bold;
+        }}
+        FuelCalculator QLineEdit, QDoubleSpinBox, QSpinBox {{
+            font-size: {font_pt_item_button}pt;
+            font-weight:bold;
+        }}
+        FuelCalculator QLineEdit:read-only {{
+            background: {color_disabled_window};
         }}
 
         /* About dialog */

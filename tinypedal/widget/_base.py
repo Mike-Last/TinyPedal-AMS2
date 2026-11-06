@@ -45,17 +45,22 @@ class Base(QWidget):
     """Base window"""
 
     def __init__(self, config: Configuration, widget_name: str):
-        super().__init__()
-        self.widget_name = widget_name
+        # Set parent if "combined_mode" option enabled (None if not)
+        from .. import container
+
+        super().__init__(container.overlay)
 
         # Base config
+        self.widget_name = widget_name
         self.cfg = config
+        self._combined_mode = self.cfg.overlay["combined_mode"]  # store state
 
         # Widget config
         self.wcfg = validate_option(self.cfg.user.setting[widget_name])
 
         # Base setting
-        self.setWindowTitle(f"{APP.TINYPEDAL} - {widget_name.capitalize()}")
+        if not self._combined_mode:
+            self.setWindowTitle(f"{APP.TINYPEDAL} - {widget_name.capitalize()}")
         self.move(self.wcfg["position_x"], self.wcfg["position_y"])
 
         # Fork: blank (transparent) state while auto hidden
@@ -74,8 +79,11 @@ class Base(QWidget):
     def start(self):
         """Set initial widget state in orders, and start update"""
         self.__connect_signal()
-        self.__set_window_attributes()  # 1
-        self.__set_window_flags()  # 2
+        if self._combined_mode:
+            self.show()
+        else:
+            self.__set_window_attributes()  # 1
+            self.__set_window_flags()  # 2
         self.__toggle_timer(not realtime_state.active)
 
     def stop(self):
@@ -170,9 +178,11 @@ class Base(QWidget):
         Window capture tools (OpenKneeboard, VR overlays) keep showing the last
         frame of a hidden window, a transparent window is captured as empty.
         Without translucent background the window is hidden as before.
+        In combined mode the widget is a child of the overlay container,
+        which handles auto hide itself, so the widget is simply hidden.
         """
         hidden = self._overlay_hidden or self._widget_hidden
-        if not self.cfg.compatibility["enable_translucent_background"]:
+        if self._combined_mode or not self.cfg.compatibility["enable_translucent_background"]:
             self.setHidden(hidden)
             return
         if self._blanked != hidden:
@@ -215,17 +225,19 @@ class Base(QWidget):
 
     def __connect_signal(self):
         """Connect overlay lock and hide signal"""
-        overlay_signal.locked.connect(self.__toggle_lock)
-        overlay_signal.hidden.connect(self.__set_hidden)
         overlay_signal.paused.connect(self.__toggle_timer)
-        overlay_signal.iconify.connect(self.__toggle_vr_compat)
+        if not self._combined_mode:
+            overlay_signal.locked.connect(self.__toggle_lock)
+            overlay_signal.hidden.connect(self.__set_hidden)
+            overlay_signal.iconify.connect(self.__toggle_vr_compat)
 
     def __break_signal(self):
         """Disconnect overlay lock and hide signal"""
-        overlay_signal.locked.disconnect(self.__toggle_lock)
-        overlay_signal.hidden.disconnect(self.__set_hidden)
         overlay_signal.paused.disconnect(self.__toggle_timer)
-        overlay_signal.iconify.disconnect(self.__toggle_vr_compat)
+        if not self._combined_mode:
+            overlay_signal.locked.disconnect(self.__toggle_lock)
+            overlay_signal.hidden.disconnect(self.__set_hidden)
+            overlay_signal.iconify.disconnect(self.__toggle_vr_compat)
 
     def mouseMoveEvent(self, event):
         """Update widget position"""
@@ -679,6 +691,8 @@ class Overlay(Base):
             layout.setContentsMargins(margin, margin, margin, margin)
         if align is not None:
             layout.setAlignment(align)
+        # Avoid resize issue if layout item hide before widget show
+        layout.setSizeConstraint(QLayout.SetFixedSize)
         return layout
 
     def set_primary_layout(

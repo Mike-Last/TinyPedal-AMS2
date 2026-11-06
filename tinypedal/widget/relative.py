@@ -73,7 +73,7 @@ class Realtime(Overlay):
 
         # Empty dataset
         self.pixmap_brandlogo = {}
-        self.row_visible = [False] * self.veh_range
+        self.row_visible = [True] * self.veh_range
 
         # Driver position
         if self.wcfg["show_position"]:
@@ -753,9 +753,8 @@ class Realtime(Overlay):
         """Update when vehicle on track"""
         _option = self.wcfg  # reduce lookup in loop
 
-        player_idx = minfo.vehicles.playerIndex
-        relative_list = self.relative_list(player_idx)
-        plr_veh_info = minfo.vehicles.dataSet[player_idx]
+        relative_list = self.relative_list(minfo.vehicles.playerIndex)
+        plr_veh_info = minfo.vehicles.playerData
         in_race = api.read.session.in_race()
 
         # Relative update

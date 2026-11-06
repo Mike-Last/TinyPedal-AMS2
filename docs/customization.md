@@ -278,7 +278,7 @@ Data recording is handled by [Fuel Module](#fuel-module).
 ## Consumption history
 Consumption history data is stored as `CSV` format (.consumption extension) under `TinyPedal\deltabest` folder (default). Those files can be opened in spreadsheet or notepad programs.
 
-Consumption history data stores lap time, fuel consumption, battery charge, tyre wear usage data per `track and vehicle class`, which can be loaded in [Fuel Calculator](#fuel-calculator). Up to 100 most recent lap entries are saved per `track and vehicle class`. Data recording is handled by [Fuel Module](#fuel-module).
+Consumption history data stores lap time, fuel consumption, battery charge, tyre wear usage data per `track and vehicle class`, which can be loaded in [Fuel Calculator](#fuel-calculator). Up to `300` most recent lap entries are saved per `track and vehicle class`. Data recording is handled by [Stint Module](#fuel-module).
 
 [**`Back to Top`**](#)
 
@@ -604,6 +604,13 @@ Enable access to `weather` data from Rest API. This is required for showing weat
     access_mode
 Set access mode for API. Mode value `0` uses copy access and additional data check to avoid data desynchronized or interruption issues. Mode value `1` uses direct access, which may result data desynchronized or interruption issues. Default mode is copy access.
 
+    memory_map_prefix
+Set memory map file name prefix for accessing RF2 API via alternative plugin version. Make sure to leave this option as blank if you are using the original `rFactor2SharedMemoryMapPlugin64.dll` Plugin.
+
+This option is provided for compatibility purpose, which may be used with alternative RF2 SharedMemory Plugin, such as [RF2.3.8.SharedMemoryMapPlugin.dll](https://github.com/TonyWhitley/rF2SharedMemoryMapPlugin/releases) that used by CrewChief.
+
+Note, to use with `RF2.3.8.SharedMemoryMapPlugin.dll`, set prefix value to `rF2.3.8.`. Remember to update prefix value (with matching version value) if a new version of the plugin DLL file installed in game.
+
     process_id
 Set process ID string for accessing API from server. This option is for server use only.
 
@@ -834,6 +841,9 @@ Set `true` to enable main application window position correction, which is used 
     enable_x11_platform_plugin_override
 Set Qt platform plugin type to `X11` via environment variable on Linux. This option may help work around some issues with overlay dragging and position on `Wayland`. This option requires restarting TinyPedal to take effect. This option is enabled by default on Linux.
 
+    overlay_combined_mode_opacity
+Set overall overlay opacity, only used when overlay `Combined Mode` is enabled.
+
     background_color_global
 Sets global background color for all widgets.
 
@@ -926,6 +936,22 @@ Enable widget visibility as windows on taskbar in order to be used in VR via APP
 
 Note, you will still need a third party program (such as `OpenKneeboard`) to project overlay windows (widgets) into VR.
 
+    combined_mode
+Enable overlay combined mode for displaying widgets. This option is disabled by default.
+
+While `Combined Mode` disabled, each Widget will be displayed in separate window. This is the default and recommended setting for normal use.
+
+While `Combined Mode` enabled, all Widgets will be combined and drawn in one single maximized window. This may improve performance and compatibility when using `OpenKneeboard` (or similar tool) for displaying overlay in `VR`, and making it easier to project overlay window.
+
+Generally, it is only recommended to enable this option for `VR`, or there is noticeable performance gain while enabled.
+
+**Known issues when enabled Combined Mode:**
+
+* Some widgets may show visual artifacts when displayed on top of other widgets, such as Navigation and Radar Widget.
+* On multi-screen, all widgets will only be displayed on one of the screens. Thus it is not recommended to enable this option for multi-screen.
+* Individual widget's `opacity` option doesn't work. To workaround this issue, a new `overlay_combined_mode_opacity` option is added to `Compatibility` config dialog, which allows to set overall overlay opacity. Note, opacity may not work on Linux.
+* Slightly increase (roughly 10%) in memory and CPU usage due to extra drawing overheads.
+
 [**`Back to Top`**](#)
 
 
@@ -1009,6 +1035,8 @@ Click `Playback Enabled` or `Playback Disabled` button to quickly enable or disa
 
 Click `Enable Playback While in Pit Lane` check box to enable or disable pace notes (that tagged with `#pit`) playback while in pit lane. This option takes immediate effect when changed.
 
+Click `Enable Playback While Spectating` check box to enable or disable pace notes playback while [Spectate Mode](#spectate-mode) enabled. This option takes immediate effect when changed.
+
 Enable `Manually Select Pace Notes File` check box to disable auto-file-name matching, and manually select a pace notes file that can be played on any track. By default, pace notes file is automatically loaded from `pace_notes_path` if a file that matches current track name is found. This option takes immediate effect when changed.
 
 `Sound file path` sets path for loading pace notes sound files that matches name value (exclude file extension) from `pace note` column found in pace notes file. If no sound file found, sound won't be played. This option takes immediate effect when changed.
@@ -1051,6 +1079,9 @@ Lock or unlock overlay.
 
     overlay_auto_hide
 Enable or disable overlay auto hide function.
+
+    overlay combined mode
+Enable or disable overlay combined mode.
 
     vr_compatibility
 Enable or disable VR Compatibility.
@@ -1114,15 +1145,17 @@ Enable or disable module.
 
 Fuel value and unit symbol depend on `Fuel Unit` setting from [Units](#units) config dialog, `L` = liter, `gal` = gallon. Virtual energy unit is `%` = percentage. Note, after changed `Fuel Unit` setting, it is required to close and reopen `Fuel calculator` in order to update units info for calculation.
 
-    Calculation panel
+### Calculation panel
+
 On the left side is calculation panel, which handles `fuel` and `virtual energy` usage calculation and results display.
 
 This panel also includes a vertical `pit stop preview` bar on the left, which visualizes pit stops as blue marks and stint laps as grey marks. Each pit stop mark shows a reference lap completion number. Total estimated number of race laps is displayed at bottom of the bar.
 
 Note, when `Energy consumption` value is higher than zero, pit stops and stint laps from preview bar will be calculated based on energy usage. Stint lap mark may not be displayed if there is not enough space to draw.
 
-    Consumption history table
-On the right side is consumption history table, which lists `lap number`, `lap time`, `fuel consumption`, `virtual energy consumption`, `fuel ratio`, `battery drain`, `battery regen`, `battery net change`, `average tyre tread wear`, `tank capacity` columns from [Consumption History](#consumption-history) data. Invalid lap time or consumption data is highlighted in red. Nonessential column can be hidden (or shown) by right-click on table header and select corresponding column name.
+### Consumption history table
+
+On the right side is consumption history table, which lists lap data from [Consumption History](#consumption-history) data. Invalid lap time or consumption data is highlighted in red. Nonessential column can be hidden (or shown) by right-click on table header and select corresponding column name.
 
 Click `Load Live` button to load or update consumption history from live session to history table and automatically fill in latest data to calculator.
 
@@ -1130,12 +1163,52 @@ Click `Load File` button to load data from specific consumption history file to 
 
 Loaded data source and track and class name will be displayed on status bar.
 
-Select one or more `Time`, `Fuel`, `Energy`, `Tyre`, `Tank` values from history table and click `Add selected data` button to send value to calculator.
+Select one or more values from history table and click `Add selected data` button to send value to calculator.
 
 Select multiple values from history table and click `Add selected data` button to calculate average reading of selected values and send to calculator.
 
+    Lap
+Lap number column.
+
+    Stint
+Stint lap number column.
+
+    Time
+Lap time column.
+
+    Fuel
+Fuel consumption column.
+
+    NRG
+Virtual energy consumption (percent) column.
+
+    F/Ratio
+Fuel and virtual energy ratio column.
+
+    Drain
+Battery drain (percent) column.
+
+    Regen
+Battery regen (percent) column.
+
+    B/NET
+Battery net change (percent) column.
+
+    Tyre F, Tyre R
+Highest front and rear tyre tread wear (percent) column.
+
+    Pad F, Pad R
+Highest front and rear brake pad wear (millimeters) column.
+
+    Tank
+Fuel tank capacity column.
+
+### Lap time setting
+
     Lap time
 Set lap time in `minutes` : `seconds` : `milliseconds` format. Values are automatically carried over between spin boxes when exceeded minimum or maximum value range. This value can be retrieved from `Time` column.
+
+### Fuel setting
 
     Tank capacity
 Set vehicle fuel tank capacity. This value can be retrieved from `Tank` column.
@@ -1144,10 +1217,15 @@ Set vehicle fuel tank capacity. This value can be retrieved from `Tank` column.
 Set fuel consumption per lap. This value can be retrieved from `Fuel` column.
 
     Energy consumption
-Set virtual energy consumption per lap. This value can be retrieved from `Energy` column.
+Set virtual energy consumption per lap. This value can be retrieved from `NRG` column.
 
-    Fuel ratio
+    Fuel/Energy ratio
 Show fuel ratio between fuel and virtual energy consumption.
+
+    Starting fuel, Starting energy
+Set amount fuel or energy to carry at the starting of race (first stint). This value affects `Total race fuel (or energy)` and `Total pit stops` calculation, and is used for calculating `Average refueling` or `Average replenishing` per pit stop. Maximum value cannot exceed `Tank capacity` for fuel (or `100%` for energy). If value is set to `0` (default), `Tank capacity` value will be used as starting fuel (or `100%` for starting energy) for `Average refueling` calculation.
+
+### Race setting
 
     Race minutes
 Set race length in minutes for time-based race. Note, option is disabled if `Race laps` is set.
@@ -1161,46 +1239,57 @@ Set number of formation or rolling start laps.
     Average pit seconds
 Set average pit stop time in seconds.
 
+### Fuel usage tab
+
     Total race fuel, Total race energy
 Show total required fuel or energy to finish race. First value is raw reading with decimal places, second value behind `≈` sign is rounded up integer reading.
-
-    End stint fuel, End stint energy
-Show remaining fuel or energy at the end of stint.
 
     Total pit stops
 Show total number of pit stops required to finish race. First value is raw reading with decimal places, second value behind `≈` sign is rounded up integer reading.
 
 Note, sometimes when `Average pit seconds` is set to longer duration, ceiling integer reading may be rounded up `2` units higher than raw reading, this is not an error. For example, it may show `5.978 ≈ 7` instead of `5.978 ≈ 6`, this is because when calculating from `6` pit stops, due to less amount time spent in pit stop compare to `7`, more fuel is required per pit stop which would exceed tank capacity, hence calculator adds 1 more pit stop.
 
-    One less pit stop
-Show theoretical fuel or energy consumption in order to make one less pit stop.
-
-    Total laps, Total minutes
-Show total laps and minutes can run based on `Total race fuel` or `Total race energy` value.
+    Total race laps, Total race minutes
+Show total race laps and minutes can be completed based on `Total race fuel` or `Total race energy` value.
 
     Maximum stint laps, Maximum stint minutes
 Show maximum laps and minutes can run per stint based on `Tank capacity` value (or 100% capacity for virtual energy).
 
-    Starting fuel, Starting energy
-Set amount fuel or energy to carry at the starting of race (first stint). This value affects `Total race fuel (or energy)` and `Total pit stops` calculation, and is used for calculating `Average refueling` or `Average replenishing` per pit stop. Maximum value cannot exceed `Tank capacity` for fuel (or `100%` for energy). If value is set to `0` (default), `Tank capacity` value will be used as starting fuel (or `100%` for starting energy) for `Average refueling` calculation.
+    Final stint laps
+Show number of laps to complete on the final stint.
+
+    End stint fuel, End stint energy
+Show remaining fuel or energy at the end of stint.
+
+    One less pit stop
+Show theoretical fuel or energy consumption in order to make one less pit stop.
 
     Average refueling, Average replenishing
 Show average refueling or replenishing per pit stop, and display warning color if value exceeds `Tank capacity` (fuel) or `100%` (energy).
 
-    Starting tyre tread
-Set average starting tyre tread (percent). For example, 100% for new tyres, and less for worn tyres.
+### Wear rate tab
 
-    Tread wear per lap
-Set average tyre tread wear (percent) per lap. This value can be retrieved from `Tyre` column.
+    Starting tyre life, Starting pad life
+Set starting tyre or brake pad life (percent). For example, 100% for new tyres, and less for worn tyres.
 
-    Tread wear per stint
-Show total average tyre tread wear (percent) per stint. Note, while virtual energy is available, this value will be calculated based on the least `maximum stint laps` between fuel and virtual energy.
+    Percent wear per lap
+Set wear (percent) per lap. For tyre wear, this value can be retrieved from `Tyre` column.
+
+    Percent wear per stint
+Show total wear (percent) per stint. Note, while virtual energy is available, this value will be calculated based on the least `maximum stint laps` between fuel and virtual energy.
 
     Lifespan laps, Lifespan minutes
-Show total tyre lifespan in laps and minutes based on `tread wear per lap` and `lap time`.
+Show total lifespan in laps and minutes based on `wear per lap` and `lap time`.
 
     Lifespan stints
-Show estimated tyre lifespan in number of stints. Note, while virtual energy is available, this value will be calculated based on the least `maximum stint laps` between fuel and virtual energy.
+Show estimated lifespan in number of stints. Note, while virtual energy is available, this value will be calculated based on the least `maximum stint laps` between fuel and virtual energy.
+
+    Brake pad thickness, Millimeter wear per lap
+Set effective brake pad thickness and wear per lap (millimeters) for calculating `Percent wear per lap`. Millimeter wear per lap value can be retrieved from `Pad` column.
+
+For LMU, `effective effective` = `brake thickness` - `failure thickness`.
+
+See Wiki Appendix for common vehicle's brake thickness reference table.
 
 [**`Back to Top`**](#)
 
@@ -1821,7 +1910,10 @@ Set maximum rotation difference between left or right wheel rotation and same ax
 Set percentage threshold for counting wheel lock duration under braking. `0.3` means 30% of tyre slip ratio.
 
     minimum_delta_distance
-Set minimum recording distance (in meters) between each tyre wear sample. Default value is `5` meters. Lower value may result more samples recorded and bigger file size; higher value may result less samples recorded and inaccuracy. Recommended value range in `5` to `10` meters.
+Set minimum recording distance (in meters) between each tyre or brake wear sample. Default value is `5` meters. Lower value may result more samples recorded and bigger file size; higher value may result less samples recorded and inaccuracy. Recommended value range in `5` to `10` meters.
+
+    minimum_brake_failure_detection_time
+Set minimum detection time (seconds) for detecting brake failure while under braking. Default is `3` seconds. Minimum detection time is limited to `1` second.
 
     enable_suspension_measurement_while_offroad
 Enable suspension travel measurement while vehicle is offroad. This option should be disabled for road racing for more accurate suspension measurement. This option is disabled by default.
@@ -2014,7 +2106,7 @@ Set duration (seconds) for continuously updating average brake temperature for a
 2 layouts are available: `0` = vertical layout, `1` = horizontal layout.
 
     show_thickness
-Show brake thickness (millimeter) instead of percentage, which also affects wear difference readings.
+Show remaining brake thickness (millimeter).
 
 Note, brake maximum thickness (for percentage wear calculation) is retrieved at the moment when car leaves garage or has brake repaired or changed. Reloading a preset or restarting APP in the middle of a running stint could result wrong maximum thickness and percentage wear calculation, which should be avoided.
 
@@ -2026,10 +2118,10 @@ For example, if `brake thickness` is `40`mm, and `failure thickness` is `25`mm, 
 
 Since brake failure thickness threshold data is not available from game API, it requires testing to find out, and may vary from vehicle to vehicle. Front brake failure thickness threshold can be different from rear brake. Thickness threshold value should not exceed brake maximum thickness, otherwise brake wear readings will not be displayed correctly.
 
-See Wiki Appendix for common vehicle's brake failure reference table.
+See Wiki Appendix for common vehicle's brake thickness reference table.
 
     show_remaining
-Show total remaining brake in percentage that changes color according to wear. A `FAIL` text will be shown on failed brakes.
+Show remaining brake thickness in percentage that changes color according to wear. A `FAIL` text will be shown on failed brakes.
 
     show_wear_difference
 Show estimated brake wear difference per lap (at least one valid lap is required).
@@ -2054,6 +2146,35 @@ Set warning threshold for estimated brake lifespan in laps. Default is `5` laps.
 
     warning_threshold_minutes
 Set warning threshold for estimated brake lifespan in minutes. Default is `5` laps.
+
+[**`Back to Top`**](#)
+
+
+## Class fields
+**This widget displays number of active, inactive, and total vehicles for each vehicle class in a session.**
+
+Each field shows class name, followed by number of active vehicles (on track or in pit lane) and total vehicles in class, for example `GT3 12/18`. Field background color follows class color from [Vehicle Class Editor](#vehicle-class-editor). Fields are sorted by class leader's overall position.
+
+    layout
+0 = vertical layout (one class per row), 1 = horizontal layout (all classes in one row).
+
+    maximum_classes
+Set maximum number of class fields to display. Valid range is `2` to `20`. Default is `5`.
+
+    class_width
+Set class name display width in characters. Longer class names are truncated, it is recommended to set short class alias in [Vehicle Class Editor](#vehicle-class-editor). Default is `4`. Set to `0` to hide class name.
+
+    background_color_class_field
+Set fallback background color for vehicles without class name.
+
+    show_active_count
+Show number of active vehicles (on track or in pit lane) in class. Vehicles that are in garage, DNF or DQ are not counted as active.
+
+    show_total_count
+Show total vehicles in class.
+
+    show_inactive_count
+Show number of inactive vehicles (in garage, DNF, DQ) in class. This option is disabled by default.
 
 [**`Back to Top`**](#)
 
@@ -2092,6 +2213,9 @@ Show distance into current lap.
 6. Wheel detached (default color: black).
 
 Note, body aero integrity and suspension damage display is only available for `LMU`.
+
+    global_scale
+Set global scale of damage display. Default is `1.0`. Minimum scale is limited to `0.1`.
 
     display_margin
 Set display margin in pixels.
@@ -2423,10 +2547,10 @@ Show temperature net change per lap.
 2 layouts are available: `0` = vertical layout, `1` = horizontal layout.
 
     show_pit_timer
-Show pit timer, and total amount time spent in pit after exit pit.
+Show pit timer, and total amount time spent in pit after exiting pit.
 
     pit_time_highlight_duration
-Set highlight duration for total amount time spent in pit after exit pit.
+Set highlight duration for total amount time spent in pit after exiting pit.
 
     pit_in_text, pit_out_text, pit_closed_text
 Set custom text for pit in, out, closed.
@@ -2519,6 +2643,17 @@ Show scheduled repairs notification and estimated repair time when damage repair
 
     scheduled_repairs_text
 Set custom text for scheduled repairs.
+
+    show_speeding_in_pit
+Show warning indication when speeding in pit lane. First value shows maximum speed exceeded above pit lane speed limit. Second value shows total speeding time in seconds.
+
+    speeding_highlight_duration
+Set highlight duration for displaying speeding indication after exiting pit.
+
+    pit_lane_speed_limit
+Set pit lane speed limit (in KPH) for detecting speeding. Default value is `60` KPH.
+
+Note, since game API does not provide speed limit info, this option must be set manually to detect speeding correctly. Different games or tracks may have different speed limit.
 
 [**`Back to Top`**](#)
 
@@ -3044,6 +3179,17 @@ Show empty lap time history. Default is `false`, which hides empty rows.
     show_laps
 Show lap number.
 
+    laps_width
+Set maximum display width for lap number. Value range in `1` to `4`. Default is `3`.
+
+This option can be used to limit column display width by stripping off unnecessary leading zeros. For example, if you know a race would never exceed `99` total laps, then you could set width to `2`. But if a race could exceed `100` total laps, then you should set width to `3` to avoid stripping off number from hundred place.
+
+    show_stint_laps
+Show stint lap number.
+
+    stint_laps_width
+Set maximum display width for stint lap number. Value range in `1` to `4`. Default is `2`.
+
     show_time
 Show lap time.
 
@@ -3051,7 +3197,7 @@ Show lap time.
 Show lap time delta between two consecutive laps.
 
     show_fuel
-Show fuel consumption per lap.
+Show fuel consumption.
 
     show_virtual_energy_if_available
 Show virtual energy consumption instead of fuel consumption if available. This option is enabled by default.
@@ -3063,7 +3209,10 @@ Show fuel (or virtual energy) unit sign. `L` for liter, `G` for Gallon, `E` for 
 Show fuel ratio between fuel and energy consumption.
 
     show_wear
-Show average tyre wear (percent) per lap.
+Show average tread wear (percent) of all tyres.
+
+    show_highest_wear
+Show highest tread wear of all tyres instead of average wear. This option is disabled by default.
 
     show_wear_sign
 Show tyre wear percentage sign.
@@ -3367,7 +3516,7 @@ Show number of vehicles that requested for pit stop, and number of vehicles curr
 **This widget displays vehicle radar info.**
 
     global_scale
-Sets global scale of radar display. Default is `6`, which is 6 times of original size.
+Set global scale of radar display. Default is `6`, which is 6 times of original size.
 
     radar_radius
 Set the radar display area by radius(unit meter). Default is `30` meters. Minimum value is limited to `5`.

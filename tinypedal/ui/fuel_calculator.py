@@ -26,7 +26,7 @@ import os
 from collections import deque
 
 from PySide2.QtCore import QPoint, Qt
-from PySide2.QtGui import QColor, QPainter
+from PySide2.QtGui import QBrush, QColor, QLinearGradient, QPainter
 from PySide2.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
@@ -35,6 +35,7 @@ from PySide2.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLayout,
     QLineEdit,
     QMenu,
     QMessageBox,
@@ -43,24 +44,24 @@ from PySide2.QtWidgets import (
     QStatusBar,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from .. import api, cfg, minfo, units
 from .. import calculation as calc
-from ..constant import CONFIG, FILE
+from ..constant import CONFIG, DATA, FILE
 from ..formatter import laptime_string_to_seconds
 from ..module_info import ConsumptionData
 from ..userfile.consumption_history import load_consumption_history_file
 from ._common import BaseDialog, UIScaler
 
 
-def set_grid_layout(parent, spacing: int = 2, margin: int = 4):
-    """Set grid layout"""
+def _set_layout(layout: QLayout, spacing: int = 2, margin: int = 4):
+    """Set layout"""
     spacing = UIScaler.pixel(spacing)
     margin = UIScaler.pixel(margin)
-    layout = QGridLayout(parent)
     layout.setSpacing(spacing)
     layout.setContentsMargins(margin, margin, margin, margin)
     return layout
@@ -78,6 +79,27 @@ def _add_output(row: int, column: int, layout: QGridLayout, editor: QWidget, tit
     if unit_text:
         layout.addWidget(QLabel(unit_text), row + 1, column + 1)
     return editor
+
+
+def _add_data_column(
+    key: str,
+    name: str,
+    width: float,
+    process: object,
+    flags: Qt.ItemFlag,
+    config: str = "",
+    highlight: bool = False,
+):
+    """Add lap data column"""
+    return {
+        "key": key,
+        "name": name,
+        "width": width,
+        "process": process,
+        "flags": flags,
+        "config": config,
+        "highlight": highlight,
+    }
 
 
 class FuelCalculator(BaseDialog):
@@ -138,8 +160,8 @@ class FuelCalculator(BaseDialog):
         layout_main.setContentsMargins(self.MARGIN, self.MARGIN, self.MARGIN, 0)
         layout_main.addLayout(layout_panel, stretch=1)
         layout_main.addWidget(self.status_bar)
-        self.setFixedWidth(self.sizeHint().width())
 
+        self.toggle_history_panel(cfg.user.config["fuel_calculator"]["show_consumption_history"])
         self.load_live_data()
 
     def load_file_data(self):
@@ -184,14 +206,14 @@ class FuelCalculator(BaseDialog):
         self.button_toggle.setText("Hide History" if checked else "Show History")
 
         margin = self.layout().contentsMargins()
-        width = self.panel_calculator.sizeHint().width() + margin.left() + margin.right()
+        width = self.panel_calculator.width() + margin.left() + margin.right()
 
         if checked:
             width += self.panel_history.sizeHint().width() + self.layout().spacing()
         self.setFixedWidth(width)
 
         config = cfg.user.config["fuel_calculator"]
-        if checked != config["show_consumption_history"]:
+        if config["show_consumption_history"] != checked:
             config["show_consumption_history"] = checked
             cfg.save(config_type=CONFIG.TYPE_CONFIG)
 
@@ -214,13 +236,11 @@ class FuelCalculator(BaseDialog):
             return
 
         selected_name = "show_column_" + selected_action.text().replace(" ", "_").lower()
-        for option_name in config:
-            if selected_name == option_name:
-                config[option_name] = not config[option_name]
-                self.panel_history.toggle_column()
-                self.toggle_history_panel(config["show_consumption_history"])
-                cfg.save(config_type=CONFIG.TYPE_CONFIG)
-                break
+        if selected_name in config:
+            config[selected_name] = not config[selected_name]
+            self.panel_history.toggle_column()
+            self.toggle_history_panel(config["show_consumption_history"])
+            cfg.save(config_type=CONFIG.TYPE_CONFIG)
 
 
 class PitStopPreview(QWidget):
@@ -236,7 +256,7 @@ class PitStopPreview(QWidget):
         frame = QFrame(self)
         frame.setFrameShape(QFrame.StyledPanel)
 
-        self.label_laps = QLabel("-")
+        self.label_laps = QLabel(DATA.TEXT_PLACEHOLDER)
         self.label_laps.setAlignment(Qt.AlignCenter)
 
         layout = QVBoxLayout()
@@ -251,7 +271,7 @@ class PitStopPreview(QWidget):
         self.floor_total_laps = int(total_laps)
         self.floor_stint_runlaps = int(stint_runlaps)
         self.floor_start_runlaps = int(start_runlaps) if start_runlaps > 0 else self.floor_stint_runlaps
-        self.label_laps.setText(str(self.floor_total_laps) if self.floor_total_laps else "-")
+        self.label_laps.setText(str(self.floor_total_laps) if self.floor_total_laps else DATA.TEXT_PLACEHOLDER)
         self.update()
 
     def paintEvent(self, event):
@@ -308,30 +328,135 @@ class HistoryPanel(QWidget):
         self.unit_fuel = units.set_unit_fuel(cfg.units["fuel_unit"])
         self.symbol_fuel = units.set_symbol_fuel(cfg.units["fuel_unit"])
 
-        headers = (
-            "Lap",
-            "Time",
-            f"Fuel({self.symbol_fuel})",
-            "Energy(%)",
-            "F/Ratio",
-            "Drain(%)",
-            "Regen(%)",
-            "B/Net(%)",
-            "Tyre(%)",
-            f"Tank({self.symbol_fuel})",
+        flag_selectable = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        flag_unselectable = Qt.ItemIsEnabled
+        self.columns = (
+            _add_data_column(
+                key="lap",
+                name="Lap",
+                width=3,
+                process=(lambda data: f"{data.lapNumber}" if data.lapNumber > 0 else DATA.TEXT_PLACEHOLDER),
+                flags=flag_unselectable,
+            ),
+            _add_data_column(
+                key="stint",
+                name="Stint",
+                width=3,
+                process=(lambda data: f"{data.stintLapNumber}" if data.stintLapNumber > 0 else DATA.TEXT_PLACEHOLDER),
+                flags=flag_unselectable,
+                config="show_column_stint_laps",
+            ),
+            _add_data_column(
+                key="time",
+                name="Time",
+                width=6,
+                process=(lambda data: calc.sec2laptime_full(data.lapTimeLast)),
+                flags=flag_selectable,
+                highlight=True,
+            ),
+            _add_data_column(
+                key="fuel",
+                name=f"Fuel({self.symbol_fuel})",
+                width=5,
+                process=(lambda data: f"{self.unit_fuel(data.lastLapUsedFuel):.3f}"),
+                flags=flag_selectable,
+                highlight=True,
+            ),
+            _add_data_column(
+                key="energy",
+                name="NRG(%)",
+                width=5,
+                process=(lambda data: f"{data.lastLapUsedEnergy:.3f}"),
+                flags=flag_selectable,
+                highlight=True,
+            ),
+            _add_data_column(
+                key="ratio",
+                name="F/Ratio",
+                width=5,
+                process=(lambda data: f"{calc.fuel_to_energy_ratio(data.lastLapUsedFuel, data.lastLapUsedEnergy):.3f}"),
+                flags=flag_unselectable,
+                config="show_column_fuel_ratio",
+            ),
+            _add_data_column(
+                key="drain",
+                name="Drain(%)",
+                width=5,
+                process=(lambda data: f"{data.batteryDrainLast:.3f}"),
+                flags=flag_unselectable,
+                config="show_column_battery_drain",
+            ),
+            _add_data_column(
+                key="regen",
+                name="Regen(%)",
+                width=5,
+                process=(lambda data: f"{data.batteryRegenLast:.3f}"),
+                flags=flag_unselectable,
+                config="show_column_battery_regen",
+            ),
+            _add_data_column(
+                key="net",
+                name="B/Net(%)",
+                width=5,
+                process=(lambda data: f"{data.batteryRegenLast - data.batteryDrainLast:+.3f}"),
+                flags=flag_unselectable,
+                config="show_column_battery_net_change",
+            ),
+            _add_data_column(
+                key="tyre_wear",
+                name="Tyre F(%)",
+                width=5,
+                process=(lambda data: f"{max(data.tyreWearFL, data.tyreWearFR):.3f}"),
+                flags=flag_selectable,
+                config="show_column_tyre_wear_front",
+            ),
+            _add_data_column(
+                key="tyre_wear",
+                name="Tyre R(%)",
+                width=5,
+                process=(lambda data: f"{max(data.tyreWearRL, data.tyreWearRR):.3f}"),
+                flags=flag_selectable,
+                config="show_column_tyre_wear_rear",
+            ),
+            _add_data_column(
+                key="brake_wear",
+                name="Pad F(mm)",
+                width=6,
+                process=(lambda data: f"{max(data.brakeWearFL, data.brakeWearFR):.6f}"),
+                flags=flag_selectable,
+                config="show_column_brake_wear_front",
+            ),
+            _add_data_column(
+                key="brake_wear",
+                name="Pad R(mm)",
+                width=6,
+                process=(lambda data: f"{max(data.brakeWearRL, data.brakeWearRR):.6f}"),
+                flags=flag_selectable,
+                config="show_column_brake_wear_rear",
+            ),
+            _add_data_column(
+                key="tank",
+                name=f"Tank({self.symbol_fuel})",
+                width=5,
+                process=(lambda data: f"{self.unit_fuel(data.capacityFuel):.3f}"),
+                flags=flag_selectable,
+                config="show_column_tank_capacity",
+            ),
         )
 
         self.table_history = QTableWidget(self)
-        self.table_history.setColumnCount(len(headers))
+        self.table_history.setColumnCount(len(self.columns))
+        self.table_history.setHorizontalHeaderLabels([col["name"] for col in self.columns])
         self.table_history.verticalHeader().setVisible(False)
-        self.table_history.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_history.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table_history.setColumnWidth(0, UIScaler.size(3))
-        self.table_history.setFixedWidth(UIScaler.size(3 + 5 * (len(headers) - 1)))
-        self.table_history.setHorizontalHeaderLabels(headers)
+        self.table_history.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        for idx, col in enumerate(self.columns):
+            self.table_history.setColumnWidth(idx, UIScaler.size(col["width"]))
 
-        self.table_history.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table_history.horizontalHeader().customContextMenuRequested.connect(parent.table_header_menu)
+        table_hori_header = self.table_history.horizontalHeader()
+        table_hori_header.setSectionResizeMode(QHeaderView.Fixed)
+        table_hori_header.setStretchLastSection(True)
+        table_hori_header.setContextMenuPolicy(Qt.CustomContextMenu)
+        table_hori_header.customContextMenuRequested.connect(parent.table_header_menu)
         self.toggle_column()
 
         layout_panel = QVBoxLayout()
@@ -342,55 +467,70 @@ class HistoryPanel(QWidget):
     def toggle_column(self):
         """Toggle column visibility"""
         config = cfg.user.config["fuel_calculator"]
-        self.table_history.setColumnHidden(4, not config["show_column_fuel_ratio"])
-        self.table_history.setColumnHidden(5, not config["show_column_battery_drain"])
-        self.table_history.setColumnHidden(6, not config["show_column_battery_regen"])
-        self.table_history.setColumnHidden(7, not config["show_column_battery_net_change"])
-        self.table_history.setColumnHidden(8, not config["show_column_tyre_wear"])
-        self.table_history.setColumnHidden(9, not config["show_column_tank_capacity"])
+        table = self.table_history
 
-        base_column_count = self.table_history.columnCount() - 1
-        hidden_column_count = 0
-        for column_index in range(self.table_history.columnCount()):
-            hidden_column_count += self.table_history.isColumnHidden(column_index)
+        width = self.table_history.verticalScrollBar().sizeHint().width() + 3
+        for idx, col in enumerate(self.columns):
+            if col["config"]:
+                table.setColumnHidden(idx, not config[col["config"]])
+            if not table.isColumnHidden(idx):
+                width += UIScaler.size(col["width"])
 
-        self.table_history.setFixedWidth(UIScaler.size(3 + 5.1 * (base_column_count - hidden_column_count)))
+        table.setFixedWidth(width)
 
     def refresh(self, dataset: deque[ConsumptionData]):
         """Refresh history data table"""
-        self.table_history.setRowCount(0)
+        table = self.table_history
+        table.setRowCount(0)
         invalid_color = QColor("#F40")
-        flag_selectable = Qt.ItemIsSelectable | Qt.ItemIsEnabled
-        flag_unselectable = Qt.NoItemFlags
+        separator_color = None
+        separator_stint = None
+        separator_session = None
+        lap_number = DATA.MAX_LAPS
 
         for row_index, lap_data in enumerate(dataset):
-            highlight_color = None if lap_data.isValidLap else invalid_color
-            self.table_history.insertRow(row_index)
-            for column_index, item in enumerate(
-                (
-                    ("lap", f"{lap_data.lapNumber}", flag_unselectable),
-                    ("time", calc.sec2laptime_full(lap_data.lapTimeLast), flag_selectable, highlight_color),
-                    ("fuel", f"{self.unit_fuel(lap_data.lastLapUsedFuel):.3f}", flag_selectable, highlight_color),
-                    ("energy", f"{lap_data.lastLapUsedEnergy:.3f}", flag_selectable, highlight_color),
-                    ("ratio", f"{calc.fuel_to_energy_ratio(lap_data.lastLapUsedFuel, lap_data.lastLapUsedEnergy):.3f}", flag_unselectable),
-                    ("drain", f"{lap_data.batteryDrainLast:.3f}", flag_unselectable),
-                    ("regen", f"{lap_data.batteryRegenLast:.3f}", flag_unselectable),
-                    ("net", f"{lap_data.batteryRegenLast - lap_data.batteryDrainLast:+.3f}", flag_unselectable),
-                    ("tyre", f"{lap_data.tyreAvgWearLast:.3f}", flag_selectable),
-                    ("tank", f"{self.unit_fuel(lap_data.capacityFuel):.3f}", flag_selectable),
+            if lap_data.lapNumber > lap_number:  # new session
+                separator_color = separator_session
+            if lap_data.isValidLap:
+                highlight_color = None
+            else:
+                highlight_color = invalid_color
+            # Add row
+            table.insertRow(row_index)
+            for column_index, col in enumerate(self.columns):
+                item = self._add_table_item(
+                    key=col["key"],
+                    text=col["process"](lap_data),
+                    flags=col["flags"],
+                    highlight=highlight_color if col["highlight"] else None,
+                    background=separator_color,
                 )
-            ):
-                self.table_history.setItem(row_index, column_index, self._add_table_item(*item))
+                table.setItem(row_index, column_index, item)
+            # Set separator style
+            if row_index == 0:  # get row height after item added to first row
+                lin_grad = QLinearGradient(0, 0, 0, table.rowHeight(0))
+                lin_grad.setStops(((0.04, "#888"), (0.05, Qt.transparent)))
+                separator_stint = QBrush(lin_grad)
+                lin_grad.setStops(((0.06, "#F40"), (0.07, Qt.transparent)))
+                separator_session = QBrush(lin_grad)
+            # Draw line separator on next row
+            lap_number = lap_data.lapNumber
+            if lap_data.stintLapNumber == 1:  # new stint
+                separator_color = separator_stint
+            else:
+                separator_color = None
 
-    def _add_table_item(self, header: str, text: str, flags: Qt.ItemFlags, highlight_color=None):
+    def _add_table_item(self, key: str, text: str, flags: Qt.ItemFlags, highlight=None, background=None):
         """Add table item"""
         item = QTableWidgetItem()
-        item.header = header
+        item.column_key = key
         item.setText(text)
         item.setTextAlignment(Qt.AlignCenter)
         item.setFlags(flags)
-        if highlight_color:
-            item.setForeground(highlight_color)
+        if highlight:
+            item.setForeground(highlight)
+        if background:
+            item.setBackground(background)
         return item
 
 
@@ -410,36 +550,48 @@ class CalculatorPanel(QWidget):
         self.input_laptime = InputLapTime(self)
         self.input_fuel = InputFuel(self)
         self.input_race = InputRace(self)
-        self.input_tyre = InputTyreWear(self)
 
         self.usage_fuel = OutputUsage(self, "Fuel")
         self.usage_energy = OutputUsage(self, "Energy")
 
-        self.refill_fuel = InputRefill(self, "Fuel")
-        self.refill_energy = InputRefill(self, "Energy")
+        self.input_tyre = InputWear(self, "Tyre")
+        self.input_brake = InputWear(self, "Pad")
 
-        layout_usage = QHBoxLayout()
-        layout_usage.addWidget(self.usage_fuel)
-        layout_usage.addWidget(self.usage_energy)
+        # Fuel usage tab
+        panel_result = QFrame()
+        layout_result = _set_layout(QHBoxLayout(), 4)
+        layout_result.addWidget(self.usage_fuel)
+        layout_result.addWidget(self.usage_energy)
+        layout_result.setAlignment(Qt.AlignTop)
+        panel_result.setLayout(layout_result)
 
-        layout_refill = QHBoxLayout()
-        layout_refill.addWidget(self.refill_fuel)
-        layout_refill.addWidget(self.refill_energy)
+        # Wear rate tab
+        panel_wear = QFrame()
+        layout_wear = _set_layout(QVBoxLayout(), 4)
+        layout_wear.addWidget(self.input_tyre)
+        layout_wear.addWidget(self.input_brake)
+        layout_wear.setAlignment(Qt.AlignTop)
+        panel_wear.setLayout(layout_wear)
 
+        # Result tabs
+        result_tabs = QTabWidget(self)
+        result_tabs.addTab(panel_result, "Fuel Usage")  # 0
+        result_tabs.addTab(panel_wear, "Wear Rate")  # 1
+
+        # Calculator panel
         layout_calculator = QVBoxLayout()
         layout_calculator.setAlignment(Qt.AlignTop)
         layout_calculator.addWidget(self.input_laptime)
         layout_calculator.addWidget(self.input_fuel)
         layout_calculator.addWidget(self.input_race)
-        layout_calculator.addLayout(layout_usage)
-        layout_calculator.addLayout(layout_refill)
-        layout_calculator.addWidget(self.input_tyre)
+        layout_calculator.addWidget(result_tabs)
 
         layout_panel = QHBoxLayout()
         layout_panel.setContentsMargins(0, 0, 0, 0)
         layout_panel.addWidget(self.pit_preview)
         layout_panel.addLayout(layout_calculator)
         self.setLayout(layout_panel)
+        self.setFixedWidth(self.sizeHint().width() * 0.9)
 
     def fill_in_data(self, dataset: deque[ConsumptionData]):
         """Fill in history data to edit"""
@@ -456,12 +608,18 @@ class CalculatorPanel(QWidget):
             self.input_fuel.capacity.setValue(self.unit_fuel(capacity))
         # Load consumption from last valid lap
         if latest_history.isValidLap:
+            # Fuel
             fuel_used = latest_history.lastLapUsedFuel
             self.input_fuel.fuel_used.setValue(self.unit_fuel(fuel_used))
+            # Energy
             energy_used = latest_history.lastLapUsedEnergy
             self.input_fuel.energy_used.setValue(energy_used)
-            tyre_wear = latest_history.tyreAvgWearLast
+            # Tyre wear
+            tyre_wear = max(latest_history.tyre_wear())
             self.input_tyre.wear_lap.setValue(tyre_wear)
+            # Brake wear
+            brake_wear = max(latest_history.brake_wear())
+            self.input_brake.wear_millimeter.setValue(brake_wear)
 
     def add_table_data(self, selected_data: list[QTableWidgetItem]):
         """Add selected history data"""
@@ -469,19 +627,22 @@ class CalculatorPanel(QWidget):
         data_fuel = []
         data_energy = []
         data_tyrewear = []
+        data_brakewear = []
         data_capacity = []
 
         for data in selected_data:
-            header = data.header
-            if header == "time":
+            column_key = data.column_key
+            if column_key == "time":
                 data_laptime.append(laptime_string_to_seconds(data.text()))
-            elif header == "fuel":
+            elif column_key == "fuel":
                 data_fuel.append(float(data.text()))
-            elif header == "energy":
+            elif column_key == "energy":
                 data_energy.append(float(data.text()))
-            elif header == "tyre":
+            elif column_key == "tyre_wear":
                 data_tyrewear.append(float(data.text()))
-            elif header == "tank":
+            elif column_key == "brake_wear":
+                data_brakewear.append(float(data.text()))
+            elif column_key == "tank":
                 data_capacity.append(data)
 
         # Send data to calculator
@@ -499,6 +660,9 @@ class CalculatorPanel(QWidget):
         if data_tyrewear:
             output_value = calc.dataset_mean(data_tyrewear)
             self.input_tyre.wear_lap.setValue(output_value)
+        if data_brakewear:
+            output_value = calc.dataset_mean(data_brakewear)
+            self.input_brake.wear_millimeter.setValue(output_value)
         if data_capacity:
             output_value = float(data_capacity[0].text())
             self.input_fuel.capacity.setValue(output_value)
@@ -518,11 +682,11 @@ class CalculatorPanel(QWidget):
         # Get fuel setup
         tank_capacity = self.input_fuel.capacity.value()
         fuel_used = self.input_fuel.fuel_used.value()
-        fuel_start = self.refill_fuel.amount_start.value(
-            ) if self.refill_fuel.amount_start.value() else tank_capacity
+        fuel_start = self.input_fuel.fuel_start.value(
+            ) if self.input_fuel.fuel_start.value() else tank_capacity
         energy_used = self.input_fuel.energy_used.value()
-        energy_start = self.refill_energy.amount_start.value(
-            ) if self.refill_energy.amount_start.value() else 100
+        energy_start = self.input_fuel.energy_start.value(
+            ) if self.input_fuel.energy_start.value() else 100
 
         # Calc fuel ratio
         if self.is_gallon:
@@ -541,17 +705,33 @@ class CalculatorPanel(QWidget):
             "energy", 100, energy_used, energy_start, total_race_seconds,
             absolute_race_laps, total_formation_laps, average_pit_seconds, laptime)
 
-        # Calc tyre
-        self._calc_tyre_consumption(fuel_stint_runlaps, energy_stint_runlaps, laptime)
-
         # Update pit preview
         if energy_used > 0:
             self.pit_preview.sync(energy_total_runlaps, energy_stint_runlaps, energy_start_runlaps)
         else:
             self.pit_preview.sync(fuel_total_runlaps, fuel_stint_runlaps, fuel_start_runlaps)
 
-    def _calc_consumption(self, output_type, tank_capacity, consumption, fuel_start,
-        total_race_seconds, absolute_race_laps, total_formation_laps, average_pit_seconds, laptime):
+        # Calc wear
+        # Pick the least runnable laps if both energy & fuel available
+        if energy_stint_runlaps > 0 < fuel_stint_runlaps:
+            min_stint_runlaps = min(fuel_stint_runlaps, energy_stint_runlaps)
+        else:
+            min_stint_runlaps = fuel_stint_runlaps
+        self.input_tyre.update(min_stint_runlaps, laptime)
+        self.input_brake.update(min_stint_runlaps, laptime)
+
+    def _calc_consumption(
+        self,
+        output_type: str,
+        tank_capacity: float,
+        consumption: float,
+        fuel_start: float,
+        total_race_seconds: float,
+        absolute_race_laps: int,
+        total_formation_laps: float,
+        average_pit_seconds: float,
+        laptime: float,
+    ):
         """Calculate and output results"""
         estimate_pit_counts = 0
         minimum_pit_counts = 0  # minimum pit stop required to finish race
@@ -563,7 +743,9 @@ class CalculatorPanel(QWidget):
         # Recalculate and find nearest minimum pit counts on previous loop
         while loop_counts:
             minimum_pit_counts = calc.ceil(estimate_pit_counts)
-            if total_race_seconds:  # time-type race
+            if consumption <= 0:  # unavailable
+                total_race_laps = 0
+            elif total_race_seconds:  # time-type race
                 total_pit_seconds = minimum_pit_counts * average_pit_seconds
                 total_race_laps = total_formation_laps + calc.time_type_full_laps_remain(
                     laptime, total_race_seconds - total_pit_seconds)
@@ -598,19 +780,19 @@ class CalculatorPanel(QWidget):
             if minimum_pit_counts == calc.ceil(estimate_pit_counts):
                 break
 
-        total_runlaps = calc.end_stint_laps(total_need_full, consumption)
+        total_runlaps = total_race_laps  # calc.end_stint_laps(total_need_full, consumption)
 
         total_runmins = calc.end_stint_minutes(total_runlaps, laptime)
 
         used_one_less = calc.one_less_pit_stop_consumption(
-            estimate_pit_counts, tank_capacity, amount_curr, total_race_laps)
+            estimate_pit_counts, tank_capacity, amount_curr, total_runlaps)
 
         if minimum_pit_counts:
             average_refuel = (
-                total_need_full - fuel_start + minimum_pit_counts * end_stint_fuel
+                amount_refuel + minimum_pit_counts * end_stint_fuel
                 ) / minimum_pit_counts
         elif fuel_start < total_need_full <= tank_capacity:
-            average_refuel = total_need_full - fuel_start
+            average_refuel = amount_refuel
         else:
             average_refuel = 0
 
@@ -624,72 +806,51 @@ class CalculatorPanel(QWidget):
         # Output
         if output_type == "fuel":
             output_usage = self.usage_fuel
-            output_refill = self.refill_fuel
         else:
             output_usage = self.usage_energy
-            output_refill = self.refill_energy
+
+        estimate_pit_counts = max(estimate_pit_counts, 0)
+        minimum_pit_counts = max(calc.ceil(minimum_pit_counts), 0)
+        final_stint_laps = max(total_runlaps - int(start_runlaps) - int(stint_runlaps) * max(minimum_pit_counts - 1, 0), 0)
 
         output_usage.total_needed.setText(
-            f"{total_need_frac:.3f} ≈ {total_need_full}")
-        output_usage.end_stint.setText(
-            f"{end_stint_fuel:.3f}")
+            f"{f'{total_need_frac:.3f}':.6} ≈ {total_need_full}")
         output_usage.pit_stops.setText(
-            f"{max(estimate_pit_counts, 0):.3f} ≈ {max(calc.ceil(minimum_pit_counts), 0)}")
-        output_usage.one_less_stint.setText(
-            f"{max(used_one_less, 0):.3f}")
+            f"{estimate_pit_counts:.3f} ≈ {minimum_pit_counts}")
+
         output_usage.total_laps.setText(
             f"{total_runlaps:.3f}")
         output_usage.total_minutes.setText(
             f"{total_runmins:.3f}")
+
         output_usage.stint_laps.setText(
             f"{stint_runlaps:.3f}")
         output_usage.stint_minutes.setText(
             f"{stint_runmins:.3f}")
 
-        output_refill.average_refill.setText(
+        output_usage.final_laps.setText(
+            f"{final_stint_laps:.3f}")
+
+        output_usage.end_stint.setText(
+            f"{end_stint_fuel:.3f}")
+        output_usage.one_less_stint.setText(
+            f"{max(used_one_less, 0):.3f}")
+
+        output_usage.average_refill.setText(
             f"{average_refuel:.3f}")
+
         # Set warning color if exceeded tank capacity
-        _highlight_invalid(output_refill.average_refill, average_refuel > tank_capacity)
+        _highlight_invalid(output_usage.average_refill, average_refuel > tank_capacity)
         return total_runlaps, stint_runlaps, start_runlaps
-
-    def _calc_tyre_consumption(self, fuel_stint_runlaps, energy_stint_runlaps, laptime):
-        """Calculate tyre consumption"""
-        # Pick the least runnable laps if both energy & fuel available
-        if energy_stint_runlaps > 0 < fuel_stint_runlaps:
-            stint_runlaps = min(fuel_stint_runlaps, energy_stint_runlaps)
-        else:
-            stint_runlaps = fuel_stint_runlaps
-
-        tyre_start_tread = self.input_tyre.start_tread.value()
-        tyre_wear_lap = self.input_tyre.wear_lap.value()
-        tyre_wear_stint = tyre_wear_lap * stint_runlaps
-
-        tyre_lifespan_laps = calc.wear_lifespan_in_laps(tyre_start_tread, tyre_wear_lap)
-        tyre_lifespan_mins = calc.wear_lifespan_in_mins(tyre_start_tread, tyre_wear_lap, laptime)
-        tyre_lifespan_stints = tyre_lifespan_laps / stint_runlaps if stint_runlaps else 0
-
-        self.input_tyre.lifespan_laps.setText(f"{tyre_lifespan_laps:.3f}")
-        self.input_tyre.lifespan_minutes.setText(f"{tyre_lifespan_mins:.3f}")
-        self.input_tyre.lifespan_stints.setText(f"{tyre_lifespan_stints:.3f}")
-
-        self.input_tyre.wear_stint.setText(f"{tyre_wear_stint:.3f}")
-        _highlight_invalid(self.input_tyre.lifespan_stints, 0 < tyre_lifespan_stints < 1)
-        _highlight_invalid(self.input_tyre.wear_stint, tyre_wear_stint >= tyre_start_tread)
-
-    def validate_starting_fuel(self):
-        """Validate starting fuel"""
-        if self.refill_fuel.amount_start.value() > self.input_fuel.capacity.value():
-            self.refill_fuel.amount_start.setValue(self.input_fuel.capacity.value())
 
 
 class InputLapTime(QFrame):
     """Input lap time setup"""
 
     def __init__(self, parent) -> None:
-        """Set input lap time"""
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
+        layout = _set_layout(QGridLayout(self))
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(2, 1)
         layout.setColumnStretch(4, 1)
@@ -756,16 +917,15 @@ class InputFuel(QFrame):
     """Input fuel setup"""
 
     def __init__(self, parent) -> None:
-        """Set input fuel"""
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
+        layout = _set_layout(QGridLayout(self))
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(2, 1)
 
         self.capacity = QDoubleSpinBox()
         self.capacity.setRange(0, 9999)
-        self.capacity.setDecimals(2)
+        self.capacity.setDecimals(3)
         self.capacity.setAlignment(Qt.AlignRight)
         self.capacity.valueChanged.connect(parent.update_input)
 
@@ -787,20 +947,39 @@ class InputFuel(QFrame):
         self.energy_used.setAlignment(Qt.AlignRight)
         self.energy_used.valueChanged.connect(parent.update_input)
 
+        self.fuel_start = QDoubleSpinBox()
+        self.fuel_start.setDecimals(2)
+        self.fuel_start.setAlignment(Qt.AlignRight)
+        self.fuel_start.setRange(0, 9999)
+        self.fuel_start.valueChanged.connect(parent.update_input)
+        self.fuel_start.valueChanged.connect(self.validate_starting_fuel)
+
+        self.energy_start = QDoubleSpinBox()
+        self.energy_start.setDecimals(2)
+        self.energy_start.setAlignment(Qt.AlignRight)
+        self.energy_start.setRange(0, 100)
+        self.energy_start.valueChanged.connect(parent.update_input)
+
         _add_output(0, 0, layout, self.capacity, "Tank Capacity:", parent.symbol_fuel)
         _add_output(0, 2, layout, self.fuel_used, "Fuel Consumption:", parent.symbol_fuel)
-        _add_output(2, 0, layout, self.fuel_ratio, "Fuel Ratio:", "")
+        _add_output(2, 0, layout, self.fuel_ratio, "Fuel/Energy Ratio:", "")
         _add_output(2, 2, layout, self.energy_used, "Energy Consumption:", "%")
+        _add_output(4, 0, layout, self.fuel_start, "Starting Fuel:", parent.symbol_fuel)
+        _add_output(4, 2, layout, self.energy_start, "Starting Energy:", "%")
+
+    def validate_starting_fuel(self, value: float):
+        """Validate starting fuel"""
+        if value > self.capacity.value():
+            self.fuel_start.setValue(self.capacity.value())
 
 
 class InputRace(QFrame):
     """Input race setup"""
 
     def __init__(self, parent) -> None:
-        """Set input race"""
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
+        layout = _set_layout(QGridLayout(self))
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(2, 1)
 
@@ -834,18 +1013,18 @@ class InputRace(QFrame):
         _add_output(2, 0, layout, self.formation, "Formation/Rolling:", "lap")
         _add_output(2, 2, layout, self.pit_seconds, "Average Pit Seconds:", "sec")
 
-    def disable_race_lap(self):
+    def disable_race_lap(self, value: int):
         """Disable race laps if race minutes is set"""
-        if self.minutes.value() > 0:
+        if value > 0:
             if self.laps.isEnabled():
                 self.laps.setValue(0)
                 self.laps.setDisabled(True)
         else:
             self.laps.setDisabled(False)
 
-    def disable_race_minute(self):
+    def disable_race_minute(self, value: int):
         """Disable race minutes if race laps is set"""
-        if self.laps.value() > 0:
+        if value > 0:
             if self.minutes.isEnabled():
                 self.minutes.setValue(0)
                 self.minutes.setDisabled(True)
@@ -856,11 +1035,10 @@ class InputRace(QFrame):
 class OutputUsage(QFrame):
     """Output usage display"""
 
-    def __init__(self, parent, type_name) -> None:
-        """Set output display"""
+    def __init__(self, parent, type_name: str) -> None:
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
+        layout = _set_layout(QGridLayout(self))
 
         if type_name == "Fuel":
             unit_text = parent.symbol_fuel
@@ -891,6 +1069,10 @@ class OutputUsage(QFrame):
         self.stint_minutes.setAlignment(Qt.AlignRight)
         self.stint_minutes.setReadOnly(True)
 
+        self.final_laps = QLineEdit("0.000")
+        self.final_laps.setAlignment(Qt.AlignRight)
+        self.final_laps.setReadOnly(True)
+
         self.end_stint = QLineEdit("0.000")
         self.end_stint.setAlignment(Qt.AlignRight)
         self.end_stint.setReadOnly(True)
@@ -899,65 +1081,54 @@ class OutputUsage(QFrame):
         self.one_less_stint.setAlignment(Qt.AlignRight)
         self.one_less_stint.setReadOnly(True)
 
-        _add_output(0, 0, layout, self.total_needed, f"Total Race {type_name}:", unit_text)
-        _add_output(2, 0, layout, self.pit_stops, "Total Pit Stops:", "pit")
-        _add_output(4, 0, layout, self.total_laps, "Total Laps:", "lap")
-        _add_output(6, 0, layout, self.total_minutes, "Total Minutes:", "min")
-        _add_output(8, 0, layout, self.stint_laps, "Maximum Stint Laps:", "lap")
-        _add_output(10, 0, layout, self.stint_minutes, "Maximum Stint Minutes:", "min")
-        _add_output(12, 0, layout, self.end_stint, f"End Stint {type_name}:", unit_text)
-        _add_output(14, 0, layout, self.one_less_stint, "One Less Pit Stop:", unit_text)
-
-
-class InputRefill(QFrame):
-    """Input refill display"""
-
-    def __init__(self, parent, type_name: str) -> None:
-        """Set output display"""
-        super().__init__(parent)
-        self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
-
-        self.amount_start = QDoubleSpinBox()
-        self.amount_start.setDecimals(2)
-        self.amount_start.setAlignment(Qt.AlignRight)
-
-        if type_name == "Fuel":
-            start_range = 9999
-            unit_text = parent.symbol_fuel
-            self.amount_start.valueChanged.connect(parent.validate_starting_fuel)
-        else:
-            start_range = 100
-            unit_text = "%"
-        self.amount_start.setRange(0, start_range)
-        self.amount_start.valueChanged.connect(parent.update_input)
-
         self.average_refill = QLineEdit("0.000")
         self.average_refill.setAlignment(Qt.AlignRight)
         self.average_refill.setReadOnly(True)
 
-        _add_output(0, 0, layout, self.amount_start, f"Starting {type_name}:", unit_text)
-        _add_output(2, 0, layout, self.average_refill, "Average Refilling:", unit_text)
+        _add_output(0, 0, layout, self.total_needed, f"Total Race {type_name}:", unit_text)
+        _add_output(2, 0, layout, self.pit_stops, "Total Pit Stops:", "pit")
+        _add_output(4, 0, layout, self.total_laps, "Total Race Laps:", "lap")
+        _add_output(6, 0, layout, self.total_minutes, "Total Race Minutes:", "min")
+        _add_output(8, 0, layout, self.stint_laps, "Max Stint Laps:", "lap")
+        _add_output(10, 0, layout, self.stint_minutes, "Max Stint Minutes:", "min")
+        _add_output(12, 0, layout, self.final_laps, "Final Stint Laps:", "lap")
+        _add_output(14, 0, layout, self.end_stint, f"End Stint {type_name}:", unit_text)
+        _add_output(16, 0, layout, self.one_less_stint, "One Less Pit Stop:", unit_text)
+        _add_output(18, 0, layout, self.average_refill, "Average Refilling:", unit_text)
 
 
-class InputTyreWear(QFrame):
-    """Input tyre wear"""
+class InputWear(QFrame):
+    """Input wear"""
 
-    def __init__(self, parent) -> None:
-        """Set input race"""
+    def __init__(self, parent, type_name: str) -> None:
         super().__init__(parent)
         self.setFrameShape(QFrame.StyledPanel)
-        layout = set_grid_layout(self)
+        layout = _set_layout(QGridLayout(self))
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(2, 1)
 
-        self.start_tread = QDoubleSpinBox()
-        self.start_tread.setRange(0, 100)
-        self.start_tread.setDecimals(3)
-        self.start_tread.setSingleStep(0.01)
-        self.start_tread.setAlignment(Qt.AlignRight)
-        self.start_tread.setValue(100.0)
-        self.start_tread.valueChanged.connect(parent.update_input)
+        if type_name == "Pad":
+            self.effective = QDoubleSpinBox()
+            self.effective.setRange(0, 99999)
+            self.effective.setDecimals(6)
+            self.effective.setSingleStep(1.0)
+            self.effective.setAlignment(Qt.AlignRight)
+            self.effective.valueChanged.connect(self.update_thickness)
+
+            self.wear_millimeter = QDoubleSpinBox()
+            self.wear_millimeter.setRange(0, 99999)
+            self.wear_millimeter.setDecimals(6)
+            self.wear_millimeter.setSingleStep(0.0001)
+            self.wear_millimeter.setAlignment(Qt.AlignRight)
+            self.wear_millimeter.valueChanged.connect(self.update_thickness)
+
+        self.wear_start = QDoubleSpinBox()
+        self.wear_start.setRange(0, 100)
+        self.wear_start.setDecimals(3)
+        self.wear_start.setSingleStep(0.01)
+        self.wear_start.setAlignment(Qt.AlignRight)
+        self.wear_start.setValue(100.0)
+        self.wear_start.valueChanged.connect(parent.update_input)
 
         self.wear_lap = QDoubleSpinBox()
         self.wear_lap.setRange(0, 100)
@@ -970,11 +1141,11 @@ class InputTyreWear(QFrame):
         self.wear_stint.setAlignment(Qt.AlignRight)
         self.wear_stint.setReadOnly(True)
 
-        self.lifespan_laps = QLineEdit("0.000")
+        self.lifespan_laps = QLineEdit("99999.000")
         self.lifespan_laps.setAlignment(Qt.AlignRight)
         self.lifespan_laps.setReadOnly(True)
 
-        self.lifespan_minutes = QLineEdit("0.000")
+        self.lifespan_minutes = QLineEdit("99999.000")
         self.lifespan_minutes.setAlignment(Qt.AlignRight)
         self.lifespan_minutes.setReadOnly(True)
 
@@ -982,9 +1153,40 @@ class InputTyreWear(QFrame):
         self.lifespan_stints.setAlignment(Qt.AlignRight)
         self.lifespan_stints.setReadOnly(True)
 
-        _add_output(0, 0, layout, self.start_tread, "Starting Tyre Tread:", "%")
-        _add_output(0, 2, layout, self.lifespan_laps, "Lifespan Laps:", "lap")
-        _add_output(2, 0, layout, self.wear_lap, "Tread Wear Per Lap:", "%")
-        _add_output(2, 2, layout, self.lifespan_minutes, "Lifespan Minutes:", "min")
-        _add_output(4, 0, layout, self.wear_stint, "Tread Wear Per Stint:", "%")
-        _add_output(4, 2, layout, self.lifespan_stints, "Lifespan Stints:", "x")
+        if type_name == "Pad":
+            _add_output(0, 0, layout, self.effective, "Brake Pad Thickness:", "mm")
+            _add_output(0, 2, layout, self.wear_millimeter, "Millimeter Wear Per Lap:", "mm")
+        _add_output(2, 0, layout, self.wear_start, f"Starting {type_name} Life:", "%")
+        _add_output(2, 2, layout, self.lifespan_laps, "Lifespan Laps:", "lap")
+        _add_output(4, 0, layout, self.wear_lap, "Percent Wear Per Lap:", "%")
+        _add_output(4, 2, layout, self.lifespan_minutes, "Lifespan Minutes:", "min")
+        _add_output(6, 0, layout, self.wear_stint, "Percent Wear Per Stint:", "%")
+        _add_output(6, 2, layout, self.lifespan_stints, "Lifespan Stints:", "x")
+
+    def update_thickness(self, value: float):
+        """Convert thickness to percent"""
+        if value > 0:
+            effective_thickness = self.effective.value()
+            if effective_thickness > 0:
+                wear_lap = self.wear_millimeter.value() * 100 / effective_thickness
+            else:
+                wear_lap = 0
+            self.wear_lap.setValue(wear_lap)
+
+    def update(self, stint_runlaps: float, laptime: float):
+        """Calculate wear"""
+        wear_start = self.wear_start.value()
+        wear_lap = self.wear_lap.value()
+        wear_stint = wear_lap * stint_runlaps
+
+        lifespan_laps = calc.wear_lifespan_in_laps(wear_start, wear_lap, 99999)
+        lifespan_mins = calc.wear_lifespan_in_mins(wear_start, wear_lap, laptime, 99999)
+        lifespan_stints = lifespan_laps / stint_runlaps if stint_runlaps else 0
+
+        self.lifespan_laps.setText(f"{lifespan_laps:.3f}")
+        self.lifespan_minutes.setText(f"{lifespan_mins:.3f}")
+        self.lifespan_stints.setText(f"{lifespan_stints:.3f}")
+
+        self.wear_stint.setText(f"{wear_stint:.3f}")
+        _highlight_invalid(self.lifespan_stints, 0 < lifespan_stints < 1)
+        _highlight_invalid(self.wear_stint, wear_stint >= wear_start)

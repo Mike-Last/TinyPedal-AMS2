@@ -71,8 +71,9 @@ class OverlayMenu(QMenu):
 
     def __init__(self, title, parent, is_tray: bool = False):
         super().__init__(title, parent)
+        self._parent = parent
+
         if is_tray:
-            self._parent = parent
             loaded_preset_font = self.font()
             loaded_preset_font.setBold(True)
             self.loaded_preset = self.addAction("")
@@ -105,6 +106,11 @@ class OverlayMenu(QMenu):
         self.overlay_vr.setCheckable(True)
         self.overlay_vr.triggered.connect(self.vr_compatibility)
 
+        # Combined mode
+        self.overlay_mode = self.addAction("Combined Mode")
+        self.overlay_mode.setCheckable(True)
+        self.overlay_mode.triggered.connect(self.combined_mode)
+
         # Reload preset (check for opened config dialog)
         reload_preset = self.addAction("Reload")
         reload_preset.triggered.connect(parent.reload_preset)
@@ -128,6 +134,7 @@ class OverlayMenu(QMenu):
         self.overlay_hide.setChecked(cfg.overlay["auto_hide"])
         self.overlay_grid.setChecked(cfg.overlay["enable_grid_move"])
         self.overlay_vr.setChecked(cfg.overlay["vr_compatibility"])
+        self.overlay_mode.setChecked(cfg.overlay["combined_mode"])
 
     def refresh_preset_name(self):
         """Refresh preset name"""
@@ -160,6 +167,27 @@ class OverlayMenu(QMenu):
     def vr_compatibility():
         """Check VR compatibility state"""
         octrl.toggle.vr()
+
+    def combined_mode(self):
+        """Check combined mode state"""
+        combined_mode = cfg.overlay["combined_mode"]
+        if combined_mode:
+            state = "Disable"
+            desc = "Each <b>Widget</b> will be displayed in separate window."
+        else:
+            state = "Enable"
+            desc = "All <b>Widgets</b> will be combined and drawn in one single maximized window."
+        msg_text = f"{state} <b>Overlay Combined Mode</b>?<br><br>{desc}"
+        toggle_msg = QMessageBox.question(
+            self._parent, "Overlay Combined Mode", msg_text,
+            buttons=QMessageBox.Yes | QMessageBox.No,
+            defaultButton=QMessageBox.No,
+        )
+        if toggle_msg != QMessageBox.Yes:
+            return
+        cfg.overlay["combined_mode"] = not combined_mode
+        cfg.save()
+        app_signal.reload.emit(True)
 
 
 class ResetDataMenu(QMenu):
@@ -373,6 +401,7 @@ class ConfigMenu(QMenu):
             default_setting=cfg.default.config,
             reload_func=menu_reload_preset,
             option_width=22,
+            fixed_column=False,
         )
         _dialog.open()
 

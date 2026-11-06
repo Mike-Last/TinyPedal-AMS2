@@ -87,8 +87,6 @@ def get_font_list() -> list[str]:
 class FontConfig(BaseDialog):
     """Config global font setting"""
 
-    TYPE = CONFIG.TYPE_CONFIG
-
     def __init__(self, parent, user_setting: dict, reload_func: Callable):
         super().__init__(parent)
         self.set_config_title("Global Font Override", cfg.filename.setting)
@@ -152,6 +150,10 @@ class FontConfig(BaseDialog):
         layout_main.setContentsMargins(self.MARGIN, self.MARGIN, self.MARGIN, self.MARGIN)
         self.setLayout(layout_main)
 
+    def interrupt(self):
+        """Interrupt when reloading preset"""
+        self.close()
+
     def applying(self):
         """Save & apply"""
         self.save_setting(self.user_setting)
@@ -211,8 +213,6 @@ class FontConfig(BaseDialog):
 class UserConfig(BaseDialog):
     """User configuration"""
 
-    TYPE = CONFIG.TYPE_CONFIG
-
     def __init__(
         self,
         parent,
@@ -222,7 +222,8 @@ class UserConfig(BaseDialog):
         user_setting: dict,
         default_setting: dict,
         reload_func: Callable,
-        option_width: int = 9,
+        option_width: int = 10,
+        fixed_column: bool = True,
     ):
         """
         Args:
@@ -233,6 +234,7 @@ class UserConfig(BaseDialog):
             default_setting: default setting dictionary, ex. cfg.default.setting.
             reload_func: config reload (callback) function.
             option_width: option column width in pixels.
+            fixed_column: whether option column width is fixed, default True.
         """
         super().__init__(parent)
         self.set_config_title(format_option_name(key_name), set_preset_name(preset_name, config_type))
@@ -243,6 +245,7 @@ class UserConfig(BaseDialog):
         self.user_setting = user_setting
         self.default_setting = default_setting
         self.option_width = UIScaler.size(option_width)
+        self.fixed_column = fixed_column
 
         # Option dict (key: option editor)
         self.option_edit: dict = {}
@@ -316,6 +319,10 @@ class UserConfig(BaseDialog):
         layout_main.setContentsMargins(self.MARGIN, self.MARGIN, self.MARGIN, self.MARGIN)
         self.setLayout(layout_main)
         self.setMinimumWidth(self.sizeHint().width() + UIScaler.size(2))
+
+    def interrupt(self):
+        """Interrupt when reloading preset"""
+        self.close()
 
     def has_display_order(self) -> bool:
         """Check whether has display order option"""
@@ -492,103 +499,96 @@ class UserConfig(BaseDialog):
     def _add_option_bool(self, row_index: int, key: str, layout: QGridLayout):
         """Bool"""
         editor = BooleanEdit(self)
-        editor.setFixedWidth(self.option_width)
         # Load selected option
         editor.setChecked(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_color(self, row_index: int, key: str, layout: QGridLayout):
         """Color string"""
         editor = ColorEdit(self, self.user_setting[self.key_name][key])
-        editor.setFixedWidth(self.option_width)
         editor.setMaxLength(9)
         editor.setValidator(QVAL_COLOR)
         # Load selected option
         editor.setText(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_path(self, row_index: int, key: str, layout: QGridLayout):
         """Path string"""
         editor = FilePathEdit(self, self.user_setting[self.key_name][key])
-        editor.setFixedWidth(self.option_width)
         # Load selected option
         editor.setText(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_image(self, row_index: int, key: str, layout: QGridLayout):
         """Image file path string"""
         editor = ImagePathEdit(self, self.user_setting[self.key_name][key])
-        editor.setFixedWidth(self.option_width)
         # Load selected option
         editor.setText(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_combolist(self, row_index: int, key: str, layout: QGridLayout, items: Sequence[str]):
         """Combo droplist string"""
         editor = DropDownListEdit(self)
-        editor.setFixedWidth(self.option_width)
         editor.addItems(items)
         # Load selected option
         editor.setCurrentText(str(self.user_setting[self.key_name][key]))
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_clock(self, row_index: int, key: str, layout: QGridLayout):
         """Clock string"""
         editor = ClockFormatEdit(self)
-        editor.setFixedWidth(self.option_width)
         # Load selected option
         editor.setText(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_string(self, row_index: int, key: str, layout: QGridLayout):
         """String"""
         editor = StringEdit(self)
-        editor.setFixedWidth(self.option_width)
         # Load selected option
         editor.setText(self.user_setting[self.key_name][key])
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_integer(self, row_index: int, key: str, layout: QGridLayout):
         """Integer"""
         editor = IntegerEdit(self)
-        editor.setFixedWidth(self.option_width)
         editor.setValidator(QVAL_INTEGER)
         # Load selected option
         editor.setText(str(self.user_setting[self.key_name][key]))
         editor.set_default(self.default_setting[self.key_name][key])
         # Add layout
-        layout.addWidget(editor, row_index, COLUMN_OPTION)
-        self.option_edit[key] = editor
+        self._set_option_layout(editor, row_index, key, layout)
 
     def _add_option_float(self, row_index: int, key: str, layout: QGridLayout):
         """Float"""
         editor = FloatEdit(self)
-        editor.setFixedWidth(self.option_width)
         editor.setValidator(QVAL_FLOAT)
         # Load selected option
         editor.setText(str(self.user_setting[self.key_name][key]))
         editor.set_default(self.default_setting[self.key_name][key])
+        # Add layout
+        self._set_option_layout(editor, row_index, key, layout)
+
+    def _set_option_layout(self, editor: QWidget, row_index: int, key: str, layout: QGridLayout):
+        """Set option column layout"""
+        # Set column width (fixed or resizeable)
+        if self.fixed_column:
+            editor.setFixedWidth(self.option_width)
+        else:
+            editor.setMinimumWidth(self.option_width)
         # Add layout
         layout.addWidget(editor, row_index, COLUMN_OPTION)
         self.option_edit[key] = editor

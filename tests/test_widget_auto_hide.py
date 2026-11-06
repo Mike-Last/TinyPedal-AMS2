@@ -8,15 +8,21 @@ from types import SimpleNamespace
 
 import pytest
 from PySide2.QtGui import QColor, QPainter
-from PySide2.QtWidgets import QApplication, QLabel, QVBoxLayout
+from PySide2.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 import tinypedal
 from tinypedal.state import ApplicationSignal, OverlaySignal, RealtimeState
 from tinypedal.widget import _base
 
 
+@pytest.fixture(params=[False], ids=["windows"])
+def combined_mode(request):
+    """Overlay combined mode (all widgets in one container window)"""
+    return request.param
+
+
 @pytest.fixture
-def widget(monkeypatch):
+def widget(monkeypatch, combined_mode):
     """A widget with a styled child label and its own painting"""
     app = QApplication.instance() or QApplication([])
     state = RealtimeState()
@@ -25,13 +31,21 @@ def widget(monkeypatch):
         monkeypatch.setattr(module, "realtime_state", state, raising=False)
         monkeypatch.setattr(module, "overlay_signal", signal, raising=False)
     monkeypatch.setattr(tinypedal, "app_signal", ApplicationSignal(), raising=False)
+    overlay = QWidget() if combined_mode else None
+    if overlay is not None:
+        overlay.resize(200, 200)
+        overlay.show()
+    monkeypatch.setattr(tinypedal, "container", SimpleNamespace(overlay=overlay), raising=False)
     state.active = True
     cfg = SimpleNamespace(
         user=SimpleNamespace(setting={"test": {
             "position_x": 0, "position_y": 0, "opacity": 1.0, "update_interval": 20, "enable": True,
         }}),
         compatibility={"enable_translucent_background": True, "enable_bypass_window_manager": False},
-        overlay={"vr_compatibility": False, "fixed_position": True, "auto_hide": True},
+        overlay={
+            "vr_compatibility": False, "fixed_position": True, "auto_hide": True,
+            "combined_mode": combined_mode,
+        },
         application={"minimum_update_interval": 10},
     )
 
@@ -108,3 +122,22 @@ def test_widget_hidden_with_overlay_hidden(widget):
     test_widget.set_widget_hidden(False)
     app.processEvents()
     assert drawn_pixels(test_widget) > 0
+
+
+@pytest.mark.parametrize("combined_mode", [True], ids=["combined"], indirect=True)
+def test_combined_mode_widget_hidden(widget):
+    """In combined mode the container handles auto hide, a widget's own hide state hides the child"""
+    test_widget, signal, _, app = widget
+    assert test_widget.isVisible()
+
+    signal.hidden.emit(True)  # not connected in combined mode, container hides itself
+    app.processEvents()
+    assert test_widget.isVisible()
+
+    test_widget.set_widget_hidden(True)
+    app.processEvents()
+    assert not test_widget.isVisible()
+
+    test_widget.set_widget_hidden(False)
+    app.processEvents()
+    assert test_widget.isVisible()

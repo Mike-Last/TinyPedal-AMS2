@@ -65,6 +65,7 @@ class Realtime(DataModule):
         gen_brake_wear = calc_brake_wear(
             output=minfo.wheels,
             min_delta_distance=self.mcfg["minimum_delta_distance"],
+            min_failure_time=max(self.mcfg["minimum_brake_failure_detection_time"], 1),
         )
         gen_susp_travel = calc_suspension_travel(
             output=minfo.wheels,
@@ -300,7 +301,7 @@ def calc_tyre_wear(output: WheelsInfo, min_delta_distance: float, lock_threshold
                 pos_last = pos_curr
 
         # Find delta data index
-        if is_valid_delta and api.read.timing.current_laptime() > 0.3:
+        if is_valid_delta:
             index_higher = calc.binary_search_higher_column(
                 delta_array_last, pos_curr, 0, len(delta_array_last) - 1)
         else:
@@ -363,7 +364,7 @@ def calc_tyre_wear(output: WheelsInfo, min_delta_distance: float, lock_threshold
 
 
 @generator_init
-def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
+def calc_brake_wear(output: WheelsInfo, min_delta_distance: float, min_failure_time: float):
     """Calculate brake wear"""
     last_reset = None  # reset check
 
@@ -372,6 +373,7 @@ def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
     brake_wear_valid = list(DATA.WHEELS_ZERO)  # valid last lap brake wear
     brake_max_thickness = list(DATA.WHEELS_ZERO)  # brake max thickness at start of stint
     failure_record = list(DATA.WHEELS_ZERO)  # recorded failure thickness
+    failure_timer = list(DATA.WHEELS_ZERO)  # recorded failure time
 
     delta_array_raw = [DATA.WHEELS_DELTA_DEFAULT]  # distance, wear diff
     delta_array_last = tuple(delta_array_raw)
@@ -407,11 +409,20 @@ def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
             is_pit_lap = 0  # whether pit in or pit out lap
             last_lap_number = DATA.MAX_LAPS
             pos_last = 0.0  # last checked vehicle position
+            last_elapsed_time = 0.0
 
         brake_curr_set = api.read.brake.wear()
         if max(brake_curr_set) < 0:
             continue
 
+        brake_input = api.read.inputs.brake()
+        elapsed_time = api.read.timing.elapsed()
+        delta_time = elapsed_time - last_elapsed_time
+        last_elapsed_time = elapsed_time
+        if delta_time <= 0:
+            continue
+
+        wheel_rot = api.read.wheel.rotation()
         lap_number = api.read.lap.completed()
         pos_curr = api.read.lap.distance()
         in_pits = api.read.vehicle.in_pits()
@@ -444,7 +455,7 @@ def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
                 pos_last = pos_curr
 
         # Find delta data index
-        if is_valid_delta and api.read.timing.current_laptime() > 0.3:
+        if is_valid_delta:
             index_higher = calc.binary_search_higher_column(
                 delta_array_last, pos_curr, 0, len(delta_array_last) - 1)
         else:
@@ -452,23 +463,27 @@ def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
 
         # Calculate wear difference & accumulated wear
         for idx, brake_curr in enumerate(brake_curr_set):
-            brake_curr *= 1000  # meter to millimeter
-
             # Log brake failure
-            if brake_curr > 0:
+            if failure_record[idx] != brake_curr > 0:
                 failure_record[idx] = brake_curr
-            elif failure_record[idx] > 0:
-                logger.info(
-                    "%s brake failed at %s(mm)",
-                    ("Front left", "Front right", "Rear left", "Rear right")[idx],
-                    failure_record[idx],
-                )
-                save_brake_failure_thickness(
-                    brake_name=brake_name_front if idx < 2 else brake_name_rear,
-                    failure=round(failure_record[idx], 2),
-                )
-                output.failureBrakeThickness[:] = brake_failure_thickness(brake_name_front, brake_name_rear)
-                failure_record[idx] = 0
+                failure_timer[idx] = 0.0
+            elif (
+                brake_input > 0.2  # min 20% brake input
+                and failure_timer[idx] < min_failure_time
+                and abs(wheel_rot[idx]) > 4  # min 4 rotation per second
+            ):
+                failure_timer[idx] += delta_time
+                if failure_timer[idx] >= min_failure_time:
+                    logger.info(
+                        "%s brake failed at %s(mm)",
+                        ("Front left", "Front right", "Rear left", "Rear right")[idx],
+                        failure_record[idx],
+                    )
+                    save_brake_failure_thickness(
+                        brake_name=brake_name_front if idx < 2 else brake_name_rear,
+                        failure=round(failure_record[idx], 2),
+                    )
+                    output.failureBrakeThickness[:] = brake_failure_thickness(brake_name_front, brake_name_rear)
 
             # Calibrate max thickness
             if brake_max_thickness[idx] < brake_curr:
@@ -509,6 +524,7 @@ def calc_brake_wear(output: WheelsInfo, min_delta_distance: float):
             output.currentlapBrakeWear[idx] = brake_wear_curr[idx]
             output.estimatedBrakeWear[idx] = est_wear
             output.estimatedValidBrakeWear[idx] = est_valid_wear
+            output.isBrakeFailed[idx] = failure_timer[idx] >= min_failure_time
 
 
 @generator_init

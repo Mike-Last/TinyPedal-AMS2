@@ -135,6 +135,7 @@ def update_vehicle_data(
     total_completed_laps = 0
     total_out_pits = 0
     total_in_pits = 0
+    total_in_garage = 0
     total_stopped_pits = 0
     total_pit_requests = 0
 
@@ -178,10 +179,11 @@ def update_vehicle_data(
             data.overallAheadIndex = temp_index
 
         if data.isPlayer:
+            output.playerIndex = index
+            output.playerData = data
             data.elapsedTime = elapsed_time
             data.worldPositionX = plr_pos_x
             data.worldPositionY = plr_pos_y
-            output.playerIndex = index
             if data.isYellow:
                 nearest_yellow_ahead = 0.0
                 nearest_yellow_behind = 0.0
@@ -232,7 +234,7 @@ def update_vehicle_data(
             elif 0 < data.currentLapProgress < 1:  # helps avoid desync
                 data.totalLapProgress = data.totalLapCompleted + data.currentLapProgress
                 data.isLapped = calc.lap_difference(
-                    data.totalLapProgress, output.dataSet[output.playerIndex].totalLapProgress,
+                    data.totalLapProgress, output.playerData.totalLapProgress,
                     max_lap_diff_ahead, max_lap_diff_behind
                 ) if in_race else 0
 
@@ -284,10 +286,7 @@ def update_vehicle_data(
             # Update counter
             total_completed_laps += laps_completed
 
-            if data.inPit == 1:  # in pit (exclude garage)
-                total_in_pits += 1
-                total_stopped_pits += (speed < 0.1)
-            elif data.inPit == 0:  # out pit
+            if data.inPit == 0:  # out pit
                 total_out_pits += 1
                 total_pit_requests += data.pitRequested
                 # Nearest traffic time gap (opponents behind local players)
@@ -300,6 +299,11 @@ def update_vehicle_data(
                     nearest_time_behind = opt_time_behind
                     if under_blue and (not in_race or data.isLapped > 0):
                         nearest_blue_class = data.vehicleClass
+            elif data.inPit == 1:  # in pit (exclude garage)
+                total_in_pits += 1
+                total_stopped_pits += (speed < 0.1)
+            else:  # in garage (or retired)
+                total_in_garage += 1
 
             # Nearest yellow flag distance
             if data.isYellow:
@@ -313,7 +317,7 @@ def update_vehicle_data(
             # Save leader info
             if data.positionOverall == 1:
                 output.leaderIndex = index
-                output.leaderBestLapTime = data.bestLapTime
+                output.leaderData = data
 
     if update_low_priority:
         output.nearestTraffic = -nearest_time_behind
@@ -323,6 +327,7 @@ def update_vehicle_data(
 
         output.totalOutPits = total_out_pits
         output.totalInPits = total_in_pits
+        output.totalInGarage = total_in_garage
         output.totalStoppedPits = total_stopped_pits
         output.totalPitRequests = total_pit_requests
         output.totalCompletedLaps = total_completed_laps
@@ -338,7 +343,7 @@ def update_finish_time(output: VehiclesInfo, max_finish_time_diff: float) -> Non
     remaining_time = api.read.session.remaining()
     leader_index = output.leaderIndex
     player_index = output.playerIndex
-    leader_pace = output.dataSet[leader_index].lapTimeHistory.average
+    leader_pace = output.leaderData.lapTimeHistory.average
     player_pace = minfo.delta.lapTimePace
 
     # Time only
@@ -356,7 +361,7 @@ def update_finish_time(output: VehiclesInfo, max_finish_time_diff: float) -> Non
             final_pit_time = 0.0
 
         # Leader time
-        if leader_index == player_index or output.dataSet[leader_index].isFinished:
+        if leader_index == player_index or output.leaderData.isFinished:
             leader_finish_offset = 0.0
             player_lap_offset = 0.0
         else:

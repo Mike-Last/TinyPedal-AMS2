@@ -216,6 +216,9 @@ class AppWindow(QMainWindow):
         self.last_style = None
         self.closing = False
 
+        # Load style before UI
+        self.refresh()
+
         # Status bar
         self.setStatusBar(StatusButtonBar(self))
 
@@ -396,8 +399,7 @@ class AppWindow(QMainWindow):
         """Reload current preset"""
         # Close any config dialog first
         for _widget in self.findChildren(BaseDialog):
-            if _widget.TYPE == CONFIG.TYPE_CONFIG:
-                _widget.close()
+            _widget.interrupt()
         tinypedal.reload(reload_preset)
         app_signal.refresh.emit(True)
 

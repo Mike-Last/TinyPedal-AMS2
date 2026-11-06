@@ -23,7 +23,6 @@ Stint module
 from __future__ import annotations
 
 from .. import api, minfo, realtime_state
-from .. import calculation as calc
 from ..constant import DATA
 from ..decorator import generator_init
 from ..module_info import ConsumptionData, HistoryInfo
@@ -124,21 +123,31 @@ def record_consumption_history(output: HistoryInfo, filepath: str):
 
         # Update consumption history
         lap_number = api.read.lap.completed()
-        if (
+        if lap_number > 0 and (
             output.consumptionDataSet[0].lapTimeLast != minfo.delta.lapTimeLast
             or output.consumptionDataSet[0].lapNumber != lap_number
         ):
+            tyre_wear = minfo.wheels.lastLapTreadWear
+            brake_wear = minfo.wheels.lastLapBrakeWear
             output.consumptionDataSet.appendleft(
                 ConsumptionData(
                     lapNumber=lap_number,
+                    stintLapNumber=minfo.history.stintDataCurrent.totalLaps,
                     isValidLap=int(minfo.delta.isValidLap),
                     lapTimeLast=minfo.delta.lapTimeLast,
                     lastLapUsedFuel=minfo.fuel.lastLapConsumption,
                     lastLapUsedEnergy=minfo.energy.lastLapConsumption,
                     batteryDrainLast=minfo.hybrid.batteryDrainLast,
                     batteryRegenLast=minfo.hybrid.batteryRegenLast,
-                    tyreAvgWearLast=calc.fmean(minfo.wheels.lastLapTreadWear),
                     capacityFuel=minfo.fuel.capacity,
+                    tyreWearFL=tyre_wear[0],
+                    tyreWearFR=tyre_wear[1],
+                    tyreWearRL=tyre_wear[2],
+                    tyreWearRR=tyre_wear[3],
+                    brakeWearFL=brake_wear[0],
+                    brakeWearFR=brake_wear[1],
+                    brakeWearRL=brake_wear[2],
+                    brakeWearRR=brake_wear[3],
                 )
             )
             output.consumptionDataVersion += 1
@@ -276,7 +285,7 @@ def record_stint_history(
             is_pit_lap = in_pits
 
         # Current stint data
-        stint_data.totalLaps = lap_number - start_laps
+        stint_data.totalLaps = max(lap_number - start_laps, 0)
         stint_data.totalTime = elapsed_time - start_time
         stint_data.totalFuel = start_fuel - fuel_curr
         stint_data.totalEnergy = start_energy - energy_curr

@@ -35,14 +35,37 @@ class ConsumptionData(NamedTuple):
     """Consumption history data"""
 
     lapNumber: int = 0
+    stintLapNumber: int = 0
     isValidLap: int = 0
+    # Lap time (seconds)
     lapTimeLast: float = 0.0
+    # Fuel (Liters)
     lastLapUsedFuel: float = 0.0
+    # Virtual energy (percentage)
     lastLapUsedEnergy: float = 0.0
+    # Battery charge (percentage)
     batteryDrainLast: float = 0.0
     batteryRegenLast: float = 0.0
-    tyreAvgWearLast: float = 0.0
+    # Fuel tank capacity (Liters)
     capacityFuel: float = 0.0
+    # Tyre wear (percentage)
+    tyreWearFL: float = 0.0
+    tyreWearFR: float = 0.0
+    tyreWearRL: float = 0.0
+    tyreWearRR: float = 0.0
+    # Brake wear (millimeters)
+    brakeWearFL: float = 0.0
+    brakeWearFR: float = 0.0
+    brakeWearRL: float = 0.0
+    brakeWearRR: float = 0.0
+
+    def tyre_wear(self) -> tuple[float, ...]:
+        """Tyre wear on all wheels"""
+        return (self.tyreWearFL, self.tyreWearFR, self.tyreWearRL, self.tyreWearRR)
+
+    def brake_wear(self) -> tuple[float, ...]:
+        """Brake wear on all wheels"""
+        return (self.brakeWearFL, self.brakeWearFR, self.brakeWearRL, self.brakeWearRR)
 
 
 @slotclass
@@ -589,7 +612,7 @@ class HistoryInfo:
     """History output data"""
 
     consumptionDataVersion: int = 0
-    consumptionDataSet: deque[ConsumptionData] = df_deque(ConsumptionData, 100)
+    consumptionDataSet: deque[ConsumptionData] = df_deque(ConsumptionData, 300)
     stintDataVersion: int = 0
     stintDataCurrent: StintData = df_wrap(StintData)
     stintDataSet: deque[StintData] = df_deque(StintData, 100)
@@ -722,20 +745,27 @@ class VehiclesInfo:
 
     dataSet: tuple[VehicleDataSet, ...] = df_tuple(VehicleDataSet, DATA.MAX_VEHICLES)
     dataSetVersion: int = -1
+    # Leader reference
     leaderIndex: int = 0
+    leaderData: VehicleDataSet = df_wrap(VehicleDataSet)
+    # Player reference
     playerIndex: int = -1
+    playerData: VehicleDataSet = df_wrap(VehicleDataSet)
+    # Counter
     totalOutPits: int = 0
     totalInPits: int = 0
+    totalInGarage: int = 0
     totalStoppedPits: int = 0
     totalPitRequests: int = 0
     totalCompletedLaps: int = 0
     totalVehicles: int = 0
+    # Nearest
     nearestLine: float = DATA.MAX_METERS
     nearestTraffic: float = DATA.MAX_SECONDS
     nearestYellowAhead: float = DATA.MAX_METERS
     nearestYellowBehind: float = -DATA.MAX_METERS
     nearestBlueClass: str = ""
-    leaderBestLapTime: float = DATA.MAX_SECONDS
+    # Finish type
     finishTimeOffset: float = 0.0
     finishAsLap: bool = True
     finishLapOffset: float = 0.0
@@ -756,14 +786,14 @@ class WheelsInfo:
     lockingPercentRear: float = 0.0
     lockingTime: list[float] = df_list(0.0, 4)
     yawRate: float = 0.0
-    # Tyre wear
+    # Tyre wear (percentage)
     currentTreadDepth: list[float] = df_list(0.0, 4)
     currentLapTreadWear: list[float] = df_list(0.0, 4)
     lastLapTreadWear: list[float] = df_list(0.0, 4)
     estimatedTreadWear: list[float] = df_list(0.0, 4)
     estimatedValidTreadWear: list[float] = df_list(0.0, 4)
     lockingTreadWear: list[float] = df_list(0.0, 4)
-    # Brake wear
+    # Brake wear (millimeters)
     maxBrakeThickness: list[float] = df_list(0.0, 4)
     failureBrakeThickness: list[float] = df_list(0.0, 4)
     currentBrakeThickness: list[float] = df_list(0.0, 4)
@@ -771,6 +801,7 @@ class WheelsInfo:
     lastLapBrakeWear: list[float] = df_list(0.0, 4)
     estimatedBrakeWear: list[float] = df_list(0.0, 4)
     estimatedValidBrakeWear: list[float] = df_list(0.0, 4)
+    isBrakeFailed: list[bool] = df_list(False, 4)
     # Suspension
     currentSuspensionPosition: list[float] = df_list(0.0, 4)
     staticSuspensionPosition: list[float] = df_list(0.0, 4)

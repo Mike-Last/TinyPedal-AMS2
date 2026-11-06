@@ -37,38 +37,44 @@ if TYPE_CHECKING:
     from .hotkey_control import HotkeyControl
     from .module_control import ModuleControl
     from .module_info import ModuleInfo
+    from .overlay_container import OverlayContainer
     from .overlay_control import OverlayControl
     from .state import ApplicationSignal, OverlaySignal, RealtimeState
     from .update import UpdateChecker
 
 
 # Create root logger
-logger = logging.getLogger(__package__)
+logger = None  # type: ignore
+
+# Global singleton (delayed init)
+log_stream: io.StringIO
+cfg: Configuration
+api: APIControl
+minfo: ModuleInfo
+mctrl: ModuleControl
+wctrl: ModuleControl
+kctrl: HotkeyControl
+octrl: OverlayControl
+updater: UpdateChecker
+container: OverlayContainer
 
 # Global state & signal
-realtime_state: RealtimeState = None  # type: ignore
-overlay_signal: OverlaySignal = None  # type: ignore
-app_signal: ApplicationSignal = None  # type: ignore
-
-# Global singleton (init later)
-log_stream: io.StringIO = None  # type: ignore
-cfg: Configuration = None  # type: ignore
-api: APIControl = None  # type: ignore
-minfo: ModuleInfo = None  # type: ignore
-mctrl: ModuleControl = None  # type: ignore
-wctrl: ModuleControl = None  # type: ignore
-kctrl: HotkeyControl = None  # type: ignore
-octrl: OverlayControl = None  # type: ignore
-updater: UpdateChecker = None  # type: ignore
+realtime_state: RealtimeState
+overlay_signal: OverlaySignal
+app_signal: ApplicationSignal
 
 
 # Public function
 def start(log_level: int, single_instance: bool):
     """Launch check & start app"""
+    # Set logger
+    global logger
+    if logger:  # one time init only
+        raise RuntimeError("launch check already done")
+    logger = logging.getLogger(__package__)
+
     # Set log stream
     global log_stream
-    if log_stream:  # one time init only
-        raise RuntimeError("launch check already done")
     log_stream = io.StringIO()
 
     # Set global path
@@ -162,8 +168,6 @@ def _init_globals(single_instance: bool, path_global: str):
     """Initialize global singleton (in order), once only after launch check done"""
     # Config
     global cfg
-    if cfg:  # one time init only
-        raise RuntimeError("global singleton already initialized")
     from .configuration import Configuration
     cfg = Configuration()
 
@@ -217,6 +221,11 @@ def _init_globals(single_instance: bool, path_global: str):
     from .update import UpdateChecker
     updater = UpdateChecker()
 
+    # Overlay container
+    global container
+    from .overlay_container import OverlayContainer
+    container = OverlayContainer()
+
 
 def _init_app():
     """Initialize gui, api, modules (once per launch)"""
@@ -254,6 +263,7 @@ def _init_app():
 
 def _load_modules():
     """Load modules (in order)"""
+    container.enable()
     mctrl.start()
     wctrl.start()
     kctrl.enable()
@@ -266,6 +276,7 @@ def _unload_modules():
     kctrl.disable()
     wctrl.close()
     mctrl.close()
+    container.disable()
 
 
 def _save_pid_file(filepath: str, filename: str):
