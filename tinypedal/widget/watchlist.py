@@ -20,12 +20,14 @@
 """
 Watchlist Widget
 
-Relative widget that only shows the drivers named in "watched_driver_names" (and the player).
+Relative widget that only shows the drivers named in "watched_driver_names" (and the player),
+with one row per watched name (plus the player).
 """
 
 from __future__ import annotations
 
 from .. import minfo
+from ..constant import DATA
 from . import relative
 
 
@@ -38,13 +40,20 @@ class Realtime(relative.Realtime):
     """Draw widget"""
 
     def __init__(self, config, widget_name):
+        self.watched_names: tuple[str, ...] = ()
+        self.show_player = True
         super().__init__(config, widget_name)
-        self.watched_names = parse_driver_names(self.wcfg["watched_driver_names"])
         self.partial_match = self.wcfg["enable_partial_name_match"]
         self.match_cache: dict[str, bool] = {}
 
+    def row_count(self, rows: int) -> int:
+        """One row per watched driver name, plus the player"""
+        self.watched_names = parse_driver_names(self.wcfg["watched_driver_names"])
+        self.show_player = bool(self.wcfg["show_player"])
+        return max(len(self.watched_names) + self.show_player, 1)
+
     def relative_list(self, player_idx: int):
-        """Relative rows of watched drivers only
+        """Relative rows of watched drivers only, in track order, empty rows last
 
         Every opponent is in both relative lists (time gap ahead and behind on track),
         keep each watched driver on the side with the smaller gap, as Relative does.
@@ -55,25 +64,22 @@ class Realtime(relative.Realtime):
             for time_gap, index in minfo.relative.relativeBehind
             if index >= 0 and self.is_watched(dataset[index].driverName)
         }
-        watched_ahead = []
-        watched_behind = []
-        for time_gap, index in minfo.relative.relativeAhead:
-            if index not in gap_behind:
-                continue
-            if time_gap <= gap_behind[index]:
-                watched_ahead.append((time_gap, index))
-            else:
-                watched_behind.append((-gap_behind[index], index))
-        # Same order as relative lists: ahead furthest first, behind nearest first
-        watched_ahead.sort(reverse=True)
-        watched_behind.sort(reverse=True)
-        return relative.relative_data(
-            watched_ahead,
-            watched_behind,
-            player_idx,
-            self.max_veh_front,
-            self.max_veh_behind,
-        )
+        watched = [
+            (time_gap, index) if time_gap <= gap_behind[index] else (-gap_behind[index], index)
+            for time_gap, index in minfo.relative.relativeAhead
+            if index in gap_behind
+        ]
+        # Keep the nearest drivers when more match than rows (partial match)
+        max_watched = self.veh_range - self.show_player
+        if len(watched) > max_watched:
+            watched.sort(key=lambda data: abs(data[0]))
+            del watched[max_watched:]
+        if self.show_player:
+            watched.append((0.0, player_idx))
+        # Same order as relative: ahead furthest first, player, behind nearest first
+        watched.sort(reverse=True)
+        watched.extend([DATA.RELATIVE_NA] * (self.veh_range - len(watched)))
+        return watched
 
     def is_watched(self, driver_name: str) -> bool:
         """Is driver name matching watched driver names (case insensitive)"""

@@ -69,6 +69,7 @@ class Realtime(Overlay):
         self.max_veh_front = min_base_veh + min(max(int(self.wcfg["additional_players_front"]), 0), 60)
         self.max_veh_behind = min_base_veh + min(max(int(self.wcfg["additional_players_behind"]), 0), 60)
         self.veh_range = max(self.max_veh_front + self.max_veh_behind, min_base_veh * 2) + 1
+        self.veh_range = self.row_count(self.veh_range)  # fork: Watchlist hook
 
         # Empty dataset
         self.pixmap_brandlogo = {}
@@ -867,6 +868,10 @@ class Realtime(Overlay):
             # Lift and coast time
             if _option["show_lift_and_coast_time"]:
                 self.update_lic(self.bars_lic[idx], veh_info.licoTimer.elapsed, veh_info.licoTimer.idling, hi_player, state)
+
+    def row_count(self, rows: int) -> int:
+        """Fork: number of rows, Watchlist hook"""
+        return rows
 
     def relative_list(self, player_idx: int):
         """Relative rows (time gap, vehicle index), ahead, player, behind"""

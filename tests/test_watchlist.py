@@ -37,15 +37,14 @@ def module_info(monkeypatch):
     return minfo
 
 
-def rows(names: str, partial: bool = False, front: int = 3, behind: int = 3) -> list:
+def rows(names: str, partial: bool = False, show_player: bool = True) -> list:
     """Watchlist relative rows, without creating the Qt widget"""
     widget = SimpleNamespace(
-        watched_names=watchlist.parse_driver_names(names),
+        wcfg={"watched_driver_names": names, "show_player": show_player},
         partial_match=partial,
         match_cache={},
-        max_veh_front=front,
-        max_veh_behind=behind,
     )
+    widget.veh_range = watchlist.Realtime.row_count(widget, 7)
     widget.is_watched = lambda name: watchlist.Realtime.is_watched(widget, name)
     return list(watchlist.Realtime.relative_list(widget, PLAYER))
 
@@ -56,37 +55,44 @@ def test_parse_driver_names():
     assert watchlist.parse_driver_names("") == ()
 
 
+def test_row_count():
+    """One row per watched name, plus the player if shown, at least one row"""
+    assert len(rows("alice smith, bob, carol")) == 4
+    assert len(rows("alice smith, bob, carol", show_player=False)) == 3
+    assert len(rows("")) == 1
+    assert len(rows("", show_player=False)) == 1
+
+
 def test_exact_match():
     """Exact match ignores case, does not match other names containing it"""
-    assert rows("alice smith, BOB") == [NA, (10.0, 2), (2.0, 1), (0.0, PLAYER), NA, NA, NA]
+    assert rows("alice smith, BOB") == [(10.0, 2), (2.0, 1), (0.0, PLAYER)]
 
 
 def test_partial_match():
     """Partial match matches any name containing watched name"""
-    assert rows("alice", partial=True) == [NA, NA, (2.0, 1), (0.0, PLAYER), (-10.0, 3), NA, NA]
-    assert rows("bob", partial=True) == [NA, (30.0, 6), (10.0, 2), (0.0, PLAYER), NA, NA, NA]
+    assert rows("alice", partial=True) == [(2.0, 1), (0.0, PLAYER)]  # nearest of two matches
+    assert rows("alice, carol", partial=True) == [(2.0, 1), (0.0, PLAYER), (-10.0, 3)]
 
 
 def test_nearer_side():
     """Each watched driver is shown once, on the side with the smaller time gap"""
-    assert rows("carol, dave") == [NA, NA, (49.0, 4), (0.0, PLAYER), (-49.0, 5), NA, NA]
+    assert rows("carol, dave") == [(49.0, 4), (0.0, PLAYER), (-49.0, 5)]
 
 
-def test_row_limits():
-    """Nearest watched drivers are kept when more are on track than rows"""
-    names = "alice smith, bob, alice jones, carol, dave, bobby"
-    assert rows(names, front=1, behind=1) == [(2.0, 1), (0.0, PLAYER), (-10.0, 3)]
-    assert rows(names, front=2, behind=0) == [(10.0, 2), (2.0, 1), (0.0, PLAYER)]
+def test_missing_driver():
+    """Watched drivers not on track leave empty rows at the bottom"""
+    assert rows("alice jones, nobody, bob") == [(10.0, 2), (0.0, PLAYER), (-10.0, 3), NA]
+    assert rows("nobody") == [(0.0, PLAYER), NA]
 
 
-def test_no_watched_driver():
-    """Player row is always shown, so the widget stays visible"""
-    assert rows("") == [NA, NA, NA, (0.0, PLAYER), NA, NA, NA]
-    assert rows("nobody") == [NA, NA, NA, (0.0, PLAYER), NA, NA, NA]
+def test_without_player():
+    """Player row is left out when show_player is off"""
+    assert rows("alice smith, alice jones", show_player=False) == [(2.0, 1), (-10.0, 3)]
+    assert rows("nobody", show_player=False) == [NA]
 
 
 def test_empty_relative_slots(module_info):
     """Unused relative slots (index -1) are never shown"""
     module_info.relative.relativeAhead.append(NA)
     module_info.relative.relativeBehind.insert(0, NA)
-    assert rows("bob") == [NA, NA, (10.0, 2), (0.0, PLAYER), NA, NA, NA]
+    assert rows("bob") == [(10.0, 2), (0.0, PLAYER)]

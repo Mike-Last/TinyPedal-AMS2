@@ -21,8 +21,9 @@ The fork adds:
 - **Automobilista 2 API** (`tinypedal/adapter/ams2_*.py`): reads AMS2's built-in shared memory. In game,
   set `Options -> System -> Shared Memory` to `Project CARS 2`, then pick `API -> Automobilista 2`.
 - **Watchlist widget** (`tinypedal/widget/watchlist.py`): a Relative widget that only shows the drivers
-  named in its `watched_driver_names` option (friends or other notable drivers) plus the player, with every
-  Relative option. It subclasses the Relative widget through a small `relative_list()` hook in `relative.py`,
+  named in its `watched_driver_names` option (friends or other notable drivers) plus the player (`show_player`),
+  with every Relative option. It has one row per watched name plus the player, filled in track order with
+  empty rows last, so `additional_players_front/behind` do not apply. It subclasses the Relative widget through a small `row_count()` and `relative_list()` hooks in `relative.py`,
   and its defaults are copied from Relative's, so new upstream Relative options carry over.
 - **Auto hide for window capture** (`tinypedal/widget/_base.py`): auto hide (and the overlay visibility
   hotkey) leaves widget windows shown but draws nothing, instead of hiding them. OpenKneeboard and other

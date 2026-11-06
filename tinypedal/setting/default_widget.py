@@ -4199,6 +4199,7 @@ WIDGET_DEFAULT = {
         "position_y": 588,
         "watched_driver_names": "",
         "enable_partial_name_match": True,
+        "show_player": True,
         "caption_text_title": "watchlist",
     },
     **{name: setting for name, setting in WIDGET_DEFAULT.items() if name > "watchlist"},
