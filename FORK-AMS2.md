@@ -34,8 +34,8 @@ See the README and `docs/customization.md` for what the AMS2 API supports and wh
 it merges the release tag into `main`, runs the fork's tests, builds the exe with py2exe (Python 3.10,
 PySide2 5.15), checks that the exe starts, and publishes a release here tagged `ams2-<version>-<run>` with
 `TinyPedal-ams2-<version>.zip` attached. Merged upstream tags are marked `upstream-merged/<tag>`.
-A merge conflict or a failed build opens an issue and leaves `main` untouched. A manual run of the workflow
-builds `main` and publishes a release.
+A merge conflict or a failed build opens an issue and leaves `main` untouched. Every push to `main` (except
+Markdown only changes) and every manual run of the workflow also builds `main` and publishes a release.
 
 Before building, `.github/scripts/check_upstream_licence.py` checks whether the upstream release changes
 licence terms: `LICENSE.txt`, `images/CC-BY-SA-4.0.txt`, `docs/licenses/`, the README `License` section

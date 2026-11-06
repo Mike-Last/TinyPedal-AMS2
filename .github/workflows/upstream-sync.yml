@@ -3,8 +3,8 @@ name: Upstream sync and build
 # Keeps this fork on top of TinyPedal/TinyPedal. Every few hours it looks at the latest upstream
 # release; when one has not been merged yet it merges the release tag into main, builds, and only if the
 # build passes pushes the merge and publishes a release of this fork with the build attached. A merge
-# conflict or a build failure opens an issue instead of touching main. Pushes to main and manual runs just
-# build (a manual run also publishes a release). A scheduled run with no new upstream release builds nothing.
+# conflict or a build failure opens an issue instead of touching main. Pushes to main and manual runs build
+# and publish a release when the build passes. A scheduled run with no new upstream release builds nothing.
 
 on:
   schedule:
@@ -183,7 +183,9 @@ jobs:
           git push origin "upstream-merged/$tag"
 
       - name: Publish a release of this fork
-        if: steps.merge.outcome == 'success' || github.event_name == 'workflow_dispatch'
+        # every push or manual run that builds is released, a scheduled run only when it merged upstream
+        # (the merge push above uses the workflow token, which does not trigger a second run)
+        if: steps.merge.outcome == 'success' || github.event_name != 'schedule'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
